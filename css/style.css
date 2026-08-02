@@ -230,6 +230,26 @@ button{font-family:inherit}
 .modal h2{margin:0 0 8px;font-size:22px}
 .modal p{color:var(--muted);margin:0 0 14px;font-size:14px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.modal-actions .btn{min-width:0}
+#modalResult{
+  width:clamp(360px,46vw,560px);
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  justify-items:center;
+  align-content:start;
+  gap:8px;
+  color:var(--ink);
+}
+#modalResult .stars,
+#modalResult .resline,
+#modalResult h2,
+#modalResult p,
+#modalResult .rewards,
+#modalResult .res-prog,
+#modalResult .modal-actions{width:100%;min-width:0}
+#modalResult h2,#modalResult p{overflow-wrap:anywhere}
+#modalResult .modal-actions{justify-content:center;flex-wrap:wrap;margin-top:10px}
+#modalResult .modal-actions .btn{flex:1 1 150px;max-width:220px}
 .stars{font-size:44px;letter-spacing:8px;color:var(--muted);margin-bottom:6px}
 .stars span.on{color:var(--acc);text-shadow:0 0 18px var(--acc);animation:pop .45s cubic-bezier(.2,1.6,.4,1) backwards}
 .stars span:nth-child(2).on{animation-delay:.15s}.stars span:nth-child(3).on{animation-delay:.3s}
@@ -354,6 +374,9 @@ button{font-family:inherit}
   #coordTable td.lbl{width:auto;font-size:12px;padding:4px 6px}
   #coordTable th{font-size:11px;letter-spacing:.5px}
   .actions .btn{flex:1}
+  #modalResult{width:calc(100vw - 24px);padding:20px 16px}
+  #modalResult .stars{font-size:38px;letter-spacing:5px}
+  #modalResult .modal-actions .btn{max-width:none}
 }
 /* app instalado na tela de início do iPad
    (só a topbar paga o inset de topo: com sticky, padding no body não protege) */
