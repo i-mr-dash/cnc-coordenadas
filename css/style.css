@@ -238,8 +238,10 @@ button{font-family:inherit}
   display:flex!important;
   flex-direction:column!important;
   align-items:center!important;
+  height:auto!important;
+  min-height:fit-content!important;
 }
-#modalResult>*{max-width:100%}
+#modalResult>*{max-width:100%;flex:0 0 auto!important}
 #modalResult>*+*{margin-top:10px}
 #modalResult #resShot{display:none!important}
 #modalResult .stars,
