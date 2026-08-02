@@ -232,14 +232,16 @@ button{font-family:inherit}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
 .modal-actions .btn{min-width:0}
 #modalResult{
-  width:clamp(360px,46vw,560px);
+  width:min(520px,calc(100vw - 32px));
+  padding:28px 26px;
   display:grid;
   grid-template-columns:minmax(0,1fr);
   justify-items:center;
   align-content:start;
-  gap:8px;
+  gap:10px;
   color:var(--ink);
 }
+#modalResult #resShot{display:none!important}
 #modalResult .stars,
 #modalResult .resline,
 #modalResult h2,
@@ -374,7 +376,7 @@ button{font-family:inherit}
   #coordTable td.lbl{width:auto;font-size:12px;padding:4px 6px}
   #coordTable th{font-size:11px;letter-spacing:.5px}
   .actions .btn{flex:1}
-  #modalResult{width:calc(100vw - 24px);padding:20px 16px}
+  #modalResult{width:calc(100vw - 24px);padding:22px 16px}
   #modalResult .stars{font-size:38px;letter-spacing:5px}
   #modalResult .modal-actions .btn{max-width:none}
 }

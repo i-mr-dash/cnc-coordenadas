@@ -676,9 +676,8 @@ function win(){
   $('#resStars').setAttribute('aria-label', st+' de 3 estrelas');
   $$('#resStars span').forEach((s,i)=>{ const on=i<st; s.classList.toggle('on',on); s.textContent=on?'★':'☆'; });
   $('#resLine').textContent = st===3?'PEÇA PERFEITA' : st===2?'DENTRO DA TOLERÂNCIA' : 'APROVADA COM RESSALVA';
-  try{ const img=$('#resShot'); img.classList.toggle('perfect',st===3); _draw();   // pixel garantido antes de capturar
-       setTimeout(()=>{ img.src=cv.toDataURL('image/jpeg',0.85); img.style.display='block'; },300);
-  }catch(e){}
+  const img=$('#resShot');
+  if(img){ img.removeAttribute('src'); img.style.display='none'; img.classList.remove('perfect'); }
   $('#resTitle').textContent = st===3?'Peça perfeita!' : st===2?'Peça aprovada!' : 'Passou no controle';
   $('#resText').textContent =
     (lv.endless?'Rodada concluída':'Fase concluída') + ` em ${mmss(secs)} · ` +
