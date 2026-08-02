@@ -235,8 +235,11 @@ button{font-family:inherit}
   width:min(520px,calc(100vw - 32px));
   padding:28px 26px;
   color:var(--ink);
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
 }
-#modalResult>*{margin-left:auto;margin-right:auto}
+#modalResult>*{max-width:100%}
 #modalResult>*+*{margin-top:10px}
 #modalResult #resShot{display:none!important}
 #modalResult .stars,
