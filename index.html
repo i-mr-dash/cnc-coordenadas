@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CNC Coordenadas — O Jogo</title>
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CNC Coordenadas">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-theme="steel">
+<a href="#app" class="skip">Pular para o conteúdo</a>
+
+<!-- ============ TOPBAR ============ -->
+<header id="topbar">
+  <div class="brand">
+    <div class="logo">⌖</div>
+    <div>
+      <div class="brand-title">CNC <span>COORDENADAS</span></div>
+      <div class="brand-sub" id="rankLabel">Aprendiz de Torno</div>
+    </div>
+  </div>
+
+  <div class="xpwrap" role="group" aria-label="Experiência">
+    <div class="xpbar" id="xpBar" role="progressbar" aria-label="Progresso de experiência" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="xpFill"></i></div>
+    <div class="xptxt"><span id="xpTxt">0 / 150 XP</span></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat" title="Moedas"><b aria-hidden="true">🪙</b><span class="vh">Moedas:</span><span id="coinTxt">0</span></div>
+    <div class="stat" title="Fichas de dica"><b aria-hidden="true">💡</b><span class="vh">Fichas de dica:</span><span id="hintTxt">3</span></div>
+    <div class="stat" title="Estrelas"><b aria-hidden="true">★</b><span class="vh">Estrelas:</span><span id="starTxt">0</span></div>
+  </div>
+
+  <nav class="navbtns">
+    <button class="btn ghost" id="navMap">Mapa</button>
+    <button class="btn ghost" id="navShop">Loja</button>
+    <button class="btn ghost" id="navHelp">Manual</button>
+  </nav>
+</header>
+
+<main id="app" tabindex="-1">
+
+  <!-- ============ MAPA DE FASES ============ -->
+  <section id="screen-map" class="screen active">
+    <div class="map-head">
+      <h1>Trilha do Torneiro</h1>
+      <p id="mapStats">Complete as fases para desbloquear ferramentas, temas e novos desafios.</p>
+    </div>
+    <div id="mapTrack" class="map-track"></div>
+    <div class="map-foot">
+      <div class="unlock-strip" id="unlockStrip"></div>
+    </div>
+  </section>
+
+  <!-- ============ JOGO ============ -->
+  <section id="screen-play" class="screen">
+    <div class="play-head">
+      <button class="btn ghost sm" id="btnBack">‹ Mapa</button>
+      <div class="lv-title">
+        <h1 id="lvName">Fase</h1>
+        <span id="lvSub">objetivo</span>
+      </div>
+      <div class="play-meta">
+        <span class="chip" id="chipMode">Absolutas</span>
+        <span class="chip" id="chipTry">Tentativas: 0</span>
+        <span class="chip" id="chipTime">00:00</span>
+      </div>
+    </div>
+
+    <div class="play-grid">
+      <div class="panel drawpanel">
+        <div class="panel-bar">
+          <span>Desenho técnico</span>
+          <div class="mini-tools">
+            <button class="mini" id="tglDims" aria-label="Mostrar ou ocultar cotas" title="Cotas">Cotas</button>
+            <button class="mini" id="tglGrid" aria-label="Mostrar ou ocultar grade" title="Grade">Grade</button>
+            <button class="mini" id="tglAxis" aria-label="Mostrar ou ocultar eixos" title="Eixos">Eixos</button>
+            <button class="mini" id="tglGhost" aria-label="Mostrar o perfil que seus números desenham" title="Desenha, em tracejado, o perfil que os SEUS números formam">Meu perfil</button>
+          </div>
+        </div>
+        <canvas id="cv" role="img" aria-label="Desenho técnico da peça"></canvas>
+        <div class="legend">
+          <span><i class="dot"></i> pontos do perfil</span>
+          <span><i class="ln"></i> linha de centro</span>
+          <span>W = zero-peça (face direita)</span>
+        </div>
+      </div>
+
+      <div class="panel tablepanel">
+        <div class="panel-bar">
+          <span>Tabela de coordenadas</span>
+          <span class="hintline" id="tipLine"></span>
+        </div>
+        <div class="tablewrap"><table id="coordTable"></table></div>
+
+        <div class="actions">
+          <button class="btn primary" id="btnCheck">Verificar</button>
+          <button class="btn" id="btnHint" title="Nível 1 é grátis e mostra onde olhar; aprofundar gasta uma ficha 💡">Dica</button>
+          <button class="btn" id="btnReveal" title="Preenche a próxima célula errada. A fase passa a valer no máximo 2 ★.">Revelar célula <small>(40 🪙 · máx. 2 ★)</small></button>
+          <button class="btn danger" id="btnExplain" disabled>Explicar</button>
+        </div>
+        <div class="feedback" id="feedback" role="status" aria-live="polite"></div>
+        <div class="hintbox" id="hintBox"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LOJA ============ -->
+  <section id="screen-shop" class="screen">
+    <div class="map-head">
+      <h1>Oficina / Loja</h1>
+      <p>Gaste moedas em ferramentas que facilitam a vida do programador.</p>
+    </div>
+    <div class="shop-grid" id="shopGrid"></div>
+  </section>
+
+  <!-- ============ MANUAL ============ -->
+  <section id="screen-help" class="screen">
+    <div class="map-head"><h1>Manual do Programador</h1><p>Consulta rápida — sempre disponível.</p></div>
+    <div class="help-grid" id="helpGrid"></div>
+  </section>
+</main>
+
+<!-- ============ MODAIS ============ -->
+<div class="overlay" id="overlay" aria-hidden="true"></div>
+
+<div class="modal" id="modalResult" role="dialog" aria-modal="true" aria-labelledby="resTitle">
+  <img id="resShot" alt="">
+  <div class="stars" id="resStars" role="img" aria-label="0 de 3 estrelas"><span aria-hidden="true">☆</span><span aria-hidden="true">☆</span><span aria-hidden="true">☆</span></div>
+  <div class="resline" id="resLine"></div>
+  <h2 id="resTitle">Peça aprovada!</h2>
+  <p id="resText"></p>
+  <div class="rewards" id="resRewards"></div>
+  <div class="res-prog" id="resProg"></div>
+  <div class="modal-actions">
+    <button class="btn ghost" id="resRepeat">Repetir</button>
+    <button class="btn primary" id="resNext">Próxima fase ›</button>
+  </div>
+</div>
+
+<div class="modal wide" id="modalExplain" role="dialog" aria-modal="true" aria-labelledby="expTitle">
+  <h2 id="expTitle">Como resolver, ponto a ponto</h2>
+  <div id="explainBody" class="explain-body"></div>
+  <div class="modal-actions">
+    <button class="btn ghost" id="expClose">Fechar e tentar de novo</button>
+    <button class="btn danger" id="expFill" title="Preenche todas as células e fecha a fase com 1 ★">Desistir e ver a resposta <small>(fase fica em 1 ★)</small></button>
+  </div>
+</div>
+
+<div class="modal wide" id="modalUnlock" role="dialog" aria-modal="true" aria-labelledby="unTitle">
+  <h2 id="unTitle">Desbloqueado!</h2>
+  <div id="unBody" class="explain-body"></div>
+  <div class="modal-actions"><button class="btn primary" id="unClose">Beleza</button></div>
+</div>
+
+<!-- tutorial -->
+<div id="tutor" class="tutor">
+  <div class="spot" id="tutSpot"></div>
+  <div class="bubble" id="tutBubble" role="dialog" aria-modal="false" aria-labelledby="tutStep" aria-describedby="tutText">
+    <div class="bstep" id="tutStep">PASSO 1</div>
+    <div id="tutText"></div>
+    <div class="berr" id="tutErr" role="alert"></div>
+    <button class="btn ghost sm" id="tutGive" style="display:none">Mostrar a resposta</button>
+    <div class="bactions">
+      <button class="btn ghost sm" id="tutSkip">Pular</button>
+      <button class="btn ghost sm" id="tutBack">‹ Voltar</button>
+      <button class="btn primary sm" id="tutNext">Próximo ›</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<canvas id="fx"></canvas>
+
+<script src="js/levels.js?v=4"></script>
+<script src="js/game.js?v=4"></script>
+</body>
+</html>

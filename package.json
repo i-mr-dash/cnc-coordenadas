@@ -1,0 +1,57 @@
+{
+  "name": "cnc-coordenadas",
+  "version": "1.0.0",
+  "description": "Jogo de treino de coordenadas de torno CNC",
+  "main": "main.js",
+  "author": "CNC Coordenadas",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.cnc.coordenadas",
+    "productName": "CNC Coordenadas",
+    "files": [
+      "main.js",
+      "index.html",
+      "manifest.webmanifest",
+      "css/**/*",
+      "js/**/*",
+      "icon.png",
+      "!node_modules/**/*"
+    ],
+    "directories": {
+      "output": "dist-app",
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CNC Coordenadas"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# dependências e builds (grandes, geradas automaticamente)
+node_modules/
+dist-app/
+build/
+*.zip
+
+# sessão do Claude Code / config local
+.claude/
+
+# logs e arquivos temporários
+*.log
