@@ -234,13 +234,10 @@ button{font-family:inherit}
 #modalResult{
   width:min(520px,calc(100vw - 32px));
   padding:28px 26px;
-  display:grid;
-  grid-template-columns:minmax(0,1fr);
-  justify-items:center;
-  align-content:start;
-  gap:10px;
   color:var(--ink);
 }
+#modalResult>*{margin-left:auto;margin-right:auto}
+#modalResult>*+*{margin-top:10px}
 #modalResult #resShot{display:none!important}
 #modalResult .stars,
 #modalResult .resline,
