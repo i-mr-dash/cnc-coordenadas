@@ -1,0 +1,387 @@
+/* =========================================================================
+   CNC COORDENADAS — dados das fases
+   Convenção (ISO / torno):
+     X  = DIÂMETRO (não raio)
+     Z0 = face direita acabada (zero-peça W)
+     Z  negativo = para dentro da peça (esquerda)
+   Cada ponto: {id, x, z, note?, g?, safe?}
+   ========================================================================= */
+
+const MODE_LABEL = {
+  abs:  'Coordenadas absolutas (X, Z)',
+  inc:  'Coordenadas incrementais (U, W)',
+  both: 'Absolutas + Incrementais',
+  gcode:'Programação G0 / G1'
+};
+
+const LEVELS = [
+{
+  id:1, name:'Primeiro Contato', sub:'Eixo Z e o diâmetro X', modes:['abs'], boss:false,
+  tip:'X é sempre DIÂMETRO. Z anda para a esquerda = negativo.',
+  brief:'Eixo simples com um degrau. Leia o diâmetro e o comprimento de cada ponto.',
+  pts:[
+    {id:'A', x:0,  z:0,   note:'começa no centro da face'},
+    {id:'B', x:20, z:0,   note:'ainda na face, mas na ponta do ø20'},
+    {id:'C', x:20, z:-20, note:'fim do trecho de 20 mm'},
+    {id:'D', x:40, z:-20, note:'sobe o degrau, mesma posição em Z'},
+    {id:'E', x:40, z:-40, note:'fim da peça'}
+  ],
+  hints:[
+    'No ponto B a ferramenta está encostada na face: Z ainda vale 0.',
+    'De B para C só muda o comprimento. O diâmetro continua ø20.',
+    'No degrau (C→D) o Z NÃO muda — só o diâmetro sobe de 20 para 40.'
+  ]
+},
+{
+  id:2, name:'Chanfro de Entrada', sub:'Chanfro 2x45° e cone', modes:['abs'], boss:false,
+  tip:'Chanfro 2x45°: anda 2 mm em Z e 4 mm em X (2 mm no raio de cada lado).',
+  brief:'Mesma peça do exemplo clássico de sala: chanfro na entrada e um cone.',
+  pts:[
+    {id:'A', x:0,  z:0,   note:'centro da face'},
+    {id:'B', x:16, z:0,   note:'ø20 menos 2 mm de raio de CADA lado = ø16'},
+    {id:'C', x:20, z:-2,  note:'fim do chanfro 2x45°: 2 mm em Z, ø cheio'},
+    {id:'D', x:20, z:-20, note:'fim do cilindro ø20'},
+    {id:'E', x:40, z:-32, note:'topo do cone, já no ø40'},
+    {id:'F', x:40, z:-50, note:'fim da peça (50 mm total)'}
+  ],
+  hints:[
+    'Chanfro 2x45° começa 2 mm ANTES no diâmetro: 20 − 2·2 = 16.',
+    'O cone D→E sobe 20 mm de diâmetro e anda 12 mm em Z.',
+    'Comprimento total 50 mm → o último ponto é Z-50.'
+  ]
+},
+{
+  id:3, name:'Pensando em Δ', sub:'Coordenadas incrementais', modes:['inc'], boss:false,
+  tip:'Incremental = quanto ANDOU desde o ponto anterior. ΔX = X atual − X anterior.',
+  brief:'A mesma leitura, mas agora você informa o deslocamento em relação ao ponto anterior.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:25, z:0},
+    {id:'C', x:25, z:-15},
+    {id:'D', x:45, z:-15},
+    {id:'E', x:45, z:-40}
+  ],
+  hints:[
+    'O primeiro ponto sai da origem: o incremental é igual ao absoluto.',
+    'Se o diâmetro não muda, ΔX = 0. Se o comprimento não muda, ΔZ = 0.',
+    'Andar para a esquerda dá ΔZ negativo; aumentar diâmetro dá ΔX positivo.'
+  ]
+},
+{
+  id:4, name:'Δ com Chanfro', sub:'Incremental em perfil composto', modes:['inc'], boss:false,
+  tip:'Num chanfro 2x45° o ΔX vale 4 e o ΔZ vale −2.',
+  brief:'Perfil com chanfro e degrau — só incrementais.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:26, z:0},
+    {id:'C', x:30, z:-2},
+    {id:'D', x:30, z:-22},
+    {id:'E', x:50, z:-22},
+    {id:'F', x:50, z:-45}
+  ],
+  hints:[
+    'B→C é o chanfro: ΔX = 30 − 26 = 4 e ΔZ = −2.',
+    'D→E é degrau reto: ΔZ = 0.',
+    'Some todos os ΔZ: o resultado tem que dar −45 (comprimento total).'
+  ]
+},
+{
+  id:5, name:'Lado a Lado', sub:'A mesma peça nas duas colunas', modes:['both'], boss:false,
+  tip:'Preencha TODA a coluna absoluta primeiro. A incremental é só a subtração de uma linha para a outra.',
+  brief:'A peça da fase 3 de novo — agora com as quatro colunas. Sem chanfro, sem cone: só o método.',
+  pts:[
+    {id:'A', x:0,  z:0,   note:'centro da face'},
+    {id:'B', x:25, z:0,   note:'ainda na face, já no ø25'},
+    {id:'C', x:25, z:-15, note:'fim do trecho de 15 mm'},
+    {id:'D', x:45, z:-15, note:'degrau: sobe o diâmetro sem andar em Z'},
+    {id:'E', x:45, z:-40, note:'fim da peça (40 mm total)'}
+  ],
+  hints:[
+    'Absoluta = medida a partir do zero-peça (a face). Incremental = a diferença para a linha de cima.',
+    'A primeira linha sai da origem, então ΔX = X e ΔZ = Z: 25 e 0.',
+    'Controle: ΣΔX = 25+0+20+0 = 45 (último X) e ΣΔZ = 0−15+0−25 = −40 (último Z).'
+  ]
+},
+{
+  id:6, name:'Duas Colunas', sub:'Absoluta e incremental juntas', modes:['both'], boss:false,
+  tip:'Preencha a absoluta primeiro; a incremental é só a subtração de uma linha para a outra.',
+  brief:'Agora as duas tabelas ao mesmo tempo, como na folha de processo.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:18, z:0},
+    {id:'C', x:22, z:-2},
+    {id:'D', x:22, z:-18},
+    {id:'E', x:36, z:-26},
+    {id:'F', x:36, z:-40},
+    {id:'G', x:56, z:-40}
+  ],
+  hints:[
+    'Absoluta = medida a partir do zero-peça. Incremental = diferença da linha de cima.',
+    'D→E é cone: muda X e Z ao mesmo tempo.',
+    'A última linha é um degrau: ΔZ = 0, ΔX = 56 − 36 = 20.'
+  ]
+},
+{
+  id:7, name:'Raio de Concordância', sub:'Chanfro, raio R3 e degrau', modes:['abs'], boss:false,
+  tip:'Num raio R3 o ponto final fica deslocado 3 mm no raio (6 mm no ø) e 3 mm em Z.',
+  brief:'Peça com chanfro, cilindro, raio e ombro. Atenção nos pontos do raio.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:14, z:0,   note:'entrada do chanfro 3x45°'},
+    {id:'C', x:20, z:-3,  note:'fim do chanfro'},
+    {id:'D', x:20, z:-20, note:'fim do ø20'},
+    {id:'E', x:26, z:-20, note:'início do raio R3'},
+    {id:'F', x:32, z:-23, arc:3, note:'fim do raio, já no ø32'},
+    {id:'G', x:32, z:-42},
+    {id:'H', x:46, z:-42}
+  ],
+  hints:[
+    'Chanfro 3x45° → começa em ø20 − 2·3 = ø14 e termina em Z−3.',
+    'O raio R3 consome 3 mm em Z e 3 mm no RAIO (6 mm no diâmetro).',
+    'E→F: X vai de 26 para 32 enquanto Z vai de −20 para −23.'
+  ]
+},
+{
+  id:8, name:'Folha de Processo', sub:'Absoluta + incremental, 8 pontos', modes:['both'], boss:false,
+  tip:'Confira somando: a soma dos ΔX tem que bater com o último X absoluto.',
+  brief:'Perfil longo. Preencha as quatro colunas sem errar o sinal.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:24, z:0},
+    {id:'C', x:30, z:-3},
+    {id:'D', x:30, z:-25},
+    {id:'E', x:44, z:-25},
+    {id:'F', x:44, z:-48},
+    {id:'G', x:60, z:-56},
+    {id:'H', x:60, z:-75}
+  ],
+  hints:[
+    'Chanfro 3x45° na entrada: ø30 − 6 = ø24.',
+    'F→G é cone: ΔX = 16 e ΔZ = −8.',
+    'Soma dos ΔZ = −75. Soma dos ΔX = 60.'
+  ]
+},
+{
+  id:9, name:'Antes de Encostar', sub:'Ponto de segurança e Z positivo', modes:['abs'], boss:false,
+  tip:'Z positivo = ainda NO AR, à direita da face. Z0 é a face; só depois dela o Z fica negativo.',
+  brief:'Peça curta e simples. O que é novo aqui são as duas primeiras linhas: o ponto de troca e a aproximação.',
+  pts:[
+    {id:'P1', x:120, z:50, safe:true, note:'ponto de segurança/troca — não está no desenho'},
+    {id:'P2', x:24,  z:2,  note:'já no ø24, mas 2 mm ANTES da face → Z positivo'},
+    {id:'P3', x:24,  z:0,  note:'encosta na face: aqui o Z vale zero'},
+    {id:'P4', x:24,  z:-20,note:'fim do cilindro ø24'},
+    {id:'P5', x:40,  z:-20,note:'degrau: só o diâmetro sobe'},
+    {id:'P6', x:40,  z:-35,note:'fim da peça (35 mm total)'}
+  ],
+  hints:[
+    'P1 é a posição de troca de ferramenta: longe de tudo, ø120 e 50 mm à direita da face → X120 Z50.',
+    'P2 está 2 mm antes da face. Antes da face = à direita do zero = Z POSITIVO (+2).',
+    'De P3 para P6 é a peça de sempre: ø24 até Z−20, degrau para ø40, e mais 15 mm até Z−35.'
+  ]
+},
+{
+  id:10, name:'A Peça do Instrutor', sub:'9 pontos + ponto de segurança', modes:['abs'], boss:false,
+  tip:'O ponto de troca/segurança fica longe da peça: X grande e Z positivo.',
+  brief:'Aquela peça de prova: ø60 escalonado com chanfros e raio. P1 é o ponto de segurança.',
+  pts:[
+    {id:'P1', x:150, z:50, safe:true, note:'ponto de segurança/troca de ferramenta'},
+    {id:'P2', x:14,  z:3,  note:'aproximação ANTES da face → Z positivo'},
+    {id:'P3', x:14,  z:0,  note:'encosta na face'},
+    {id:'P4', x:20,  z:-3, note:'fim do chanfro 3x45°'},
+    {id:'P5', x:20,  z:-20},
+    {id:'P6', x:34,  z:-20, note:'início do raio R3'},
+    {id:'P7', x:40,  z:-23, arc:3, note:'fim do raio R3'},
+    {id:'P8', x:40,  z:-40},
+    {id:'P9', x:54,  z:-40, note:'início do chanfro 3x45° do ø60'},
+    {id:'P10',x:60,  z:-43, note:'fim do chanfro'}
+  ],
+  hints:[
+    'P1 não toca a peça: é o ø150 a 50 mm da face (Z+50).',
+    'P2 está 3 mm ANTES da face, então Z = +3.',
+    'Do ø40 para o ø60 com chanfro 3x45°: começa em ø54 e termina 3 mm depois em Z.'
+  ]
+},
+{
+  id:11, name:'Cinco Blocos', sub:'Primeiro programa: G0 e G1', modes:['gcode'], boss:false,
+  tip:'G0 = no ar, sem cortar. G1 = cortando. Só a aproximação é G0 aqui.',
+  brief:'A peça da fase 1, agora escrita como programa. Cinco blocos, um G0 e quatro G1.',
+  pts:[
+    {id:'N10', x:20, z:2,   g:'G0', note:'aproxima no ar, 2 mm antes da face'},
+    {id:'N20', x:20, z:0,   g:'G1', note:'encosta na face — a partir daqui há material'},
+    {id:'N30', x:20, z:-20, g:'G1', note:'torneia os 20 mm do ø20'},
+    {id:'N40', x:40, z:-20, g:'G1', note:'degrau: sobe para ø40 sem andar em Z'},
+    {id:'N50', x:40, z:-40, g:'G1', note:'termina os 40 mm da peça'}
+  ],
+  hints:[
+    'Só o primeiro bloco é no ar: N10 é G0, todo o resto é G1.',
+    'N10 está ANTES da face (Z+2) e N20 encosta nela (Z0) — o X não muda, continua ø20.',
+    'N30→N40 é degrau: Z fica em −20 e o X vai de 20 para 40.'
+  ]
+},
+{
+  id:12, name:'Escrevendo G-Code', sub:'G0 rápido, G1 usinando', modes:['gcode'], boss:false,
+  tip:'G0 = deslocamento rápido, no ar, sem F. G1 = avanço de trabalho, cortando, com F.',
+  brief:'Agora vira programa: escolha G0/G1 e preencha X e Z de cada bloco.',
+  pts:[
+    {id:'N10', x:0,  z:2,  g:'G0', note:'aproxima no ar, 2 mm antes da face'},
+    {id:'N20', x:0,  z:0,  g:'G1', note:'posiciona no centro da face'},
+    {id:'N30', x:20, z:0,  g:'G1'},
+    {id:'N40', x:20, z:-25,g:'G1'},
+    {id:'N50', x:40, z:-25,g:'G1'},
+    {id:'N60', x:40, z:-45,g:'G1'},
+    {id:'N70', x:100,z:50, g:'G0', safe:true, note:'recua para o ponto seguro'}
+  ],
+  hints:[
+    'Movimento no ar (aproximação e recuo) sempre G0; qualquer corte é G1.',
+    'A aproximação em Z+2 fica ANTES da face: Z positivo.',
+    'O último bloco leva a ferramenta para longe: G0 X100 Z50.'
+  ]
+},
+{
+  id:13, name:'Perfil Cônico', sub:'Absoluta + incremental com dois cones', modes:['both'], boss:false,
+  tip:'Em cone, X e Z mudam na mesma linha. Calcule um de cada vez.',
+  brief:'Dois cones e um degrau. Cada cone muda X e Z na mesma linha.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:16, z:0},
+    {id:'C', x:20, z:-2},
+    {id:'D', x:20, z:-15},
+    {id:'E', x:34, z:-30},
+    {id:'F', x:34, z:-45},
+    {id:'G', x:48, z:-52},
+    {id:'H', x:48, z:-70},
+    {id:'I', x:64, z:-70}
+  ],
+  hints:[
+    'D→E é cone: ΔX = 14 e ΔZ = −15.',
+    'F→G é o segundo cone: ΔX = 14 e ΔZ = −7.',
+    'A última linha é degrau reto: ΔZ = 0.'
+  ]
+},
+{
+  id:14, name:'Programa Completo', sub:'G-code com chanfro e cone', modes:['gcode'], boss:false,
+  tip:'Aproxime sempre no ar (G0) até 2 mm da peça e só depois use G1.',
+  brief:'Programa de acabamento inteiro, do ponto seguro até o recuo.',
+  pts:[
+    {id:'N10', x:120,z:50, g:'G0', safe:true, note:'ponto de troca'},
+    {id:'N20', x:14, z:2,  g:'G0', note:'aproximação rápida'},
+    {id:'N30', x:14, z:0,  g:'G1'},
+    {id:'N40', x:20, z:-3, g:'G1', note:'chanfro 3x45°'},
+    {id:'N50', x:20, z:-22,g:'G1'},
+    {id:'N60', x:32, z:-22,g:'G1'},
+    {id:'N70', x:32, z:-46,g:'G1'},
+    {id:'N80', x:50, z:-55,g:'G1', note:'cone'},
+    {id:'N90', x:50, z:-70,g:'G1'},
+    {id:'N100',x:120,z:50, g:'G0', safe:true, note:'recuo'}
+  ],
+  hints:[
+    'Blocos N10, N20 e N100 são no ar → G0. Todo o resto é G1.',
+    'O chanfro 3x45° sai de ø14 (=20−6) na face e termina em ø20 Z−3.',
+    'N70→N80 é cone: X vai a 50 enquanto Z vai a −55.'
+  ]
+},
+{
+  id:15, name:'Peça de Prova', sub:'CHEFE — tudo junto', modes:['both'], boss:true,
+  tip:'Sem pressa: absoluta primeiro, incremental depois, confira as somas.',
+  brief:'11 pontos, chanfro, raio, dois cones e degraus. Prove que virou programador.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:12, z:0},
+    {id:'C', x:18, z:-3},
+    {id:'D', x:18, z:-16},
+    {id:'E', x:26, z:-16},
+    {id:'F', x:32, z:-19, arc:3},
+    {id:'G', x:32, z:-38},
+    {id:'H', x:46, z:-48},
+    {id:'I', x:46, z:-62},
+    {id:'J', x:58, z:-68},
+    {id:'K', x:58, z:-88}
+  ],
+  hints:[
+    'Chanfro 3x45° na entrada: ø18 − 6 = ø12.',
+    'E→F é raio R3: 3 mm no raio (6 no diâmetro) e 3 mm em Z.',
+    'Somas de controle: ΣΔX = 58 e ΣΔZ = −88.'
+  ]
+}
+];
+
+/* ---- gerador do Modo Infinito (desbloqueado após a fase 15) ---- */
+function makeEndlessLevel(seedRun){
+  const R=(a,b,st=1)=> a + st*Math.floor(Math.random()*((b-a)/st+1));
+  const run  = Math.max(1, seedRun|0);
+  const tier = Math.min(4, Math.floor((run-1)/4));   // sobe a cada 4 rodadas, sem teto na 8
+  const ALPHA='ABCDEFGHIJKLMN';
+
+  /* geometria (perfil sempre monotônico) */
+  const nGeo = Math.min(12, 5 + Math.floor(run/2) + tier);
+  const ch = R(2,3);
+  let d = R(12,26,2), z = 0;
+  const geo=[{x:0, z:0, note:'centro da face'}];
+  geo.push({x:d-2*ch, z:0,   note:`entrada do chanfro ${ch}x45° (ø${d} − 2·${ch})`});
+  geo.push({x:d,      z:-ch, note:'fim do chanfro'});
+  z = -ch;
+  let lastWasStep = true;
+  while(geo.length < nGeo){
+    const left = nGeo - geo.length;
+    if(lastWasStep || left===1){ z -= R(10,26,1); geo.push({x:d, z}); lastWasStep=false; continue; }
+    let grow = R(8,16,2);
+    if(d+grow > 80) grow = 80-d;
+    if(grow < 8){ z -= R(10,20); geo.push({x:d, z}); lastWasStep=false; continue; }
+    const roll = Math.random();
+    if(tier>=2 && left>=2 && roll<.30){                // raio de concordância (rodada 9+)
+      const r = R(2,3);
+      geo.push({x:d+grow-2*r, z, note:`início do raio R${r}`});
+      d += grow; z -= r;
+      geo.push({x:d, z, arc:r, note:`fim do raio R${r}`});
+    } else if(tier>=1 && roll<.60){                    // cone (rodada 5+)
+      d += grow; z -= R(4,10);
+      geo.push({x:d, z, note:'cone'});
+    } else {                                           // degrau reto
+      d += grow; geo.push({x:d, z});
+    }
+    lastWasStep = true;
+  }
+  if(lastWasStep && geo.length<nGeo){ z -= R(10,20); geo.push({x:d, z, note:'fim da peça'}); }
+
+  /* modo: gcode entra no rodízio a partir da rodada 6 */
+  const POOL = run<6 ? ['abs','inc','both','abs','inc','both']
+                     : ['both','gcode','abs','both','inc','gcode'];
+  const modes = [ POOL[run % POOL.length] ];
+  const isG   = modes[0]==='gcode';
+  const useSafe = isG || (run>=8 && modes[0]!=='inc');
+
+  /* pontos */
+  const pts=[];
+  if(isG){
+    let n=0;
+    const blk = o => pts.push(Object.assign({id:'N'+(10*++n)}, o));
+    if(useSafe) blk({x:120, z:50, g:'G0', safe:true, note:'ponto de segurança/troca de ferramenta'});
+    blk({x:0, z:2, g:'G0', note:'aproximação no ar, 2 mm antes da face'});
+    geo.forEach(p => blk(Object.assign({}, p, {g:'G1'})));
+    if(useSafe) blk({x:120, z:50, g:'G0', safe:true, note:'recuo para o ponto seguro'});
+  } else if(useSafe){
+    let n=2;
+    pts.push({id:'P1', x:150, z:50, safe:true, note:'ponto de segurança/troca de ferramenta'});
+    pts.push({id:'P2', x:geo[1].x, z:3, note:'aproximação ANTES da face → Z positivo'});
+    geo.slice(1).forEach(p => pts.push(Object.assign({}, p, {id:'P'+(++n)})));
+  } else {
+    geo.forEach((p,i) => pts.push(Object.assign({}, p, {id:ALPHA[i]})));
+  }
+
+  const nivel = ['aquecimento','com cone','com raio','longa','completa'][tier];
+  return {
+    id:'inf', name:'Modo Infinito #'+run, sub:MODE_LABEL[modes[0]], modes, endless:true, boss:false,
+    tip: isG ? 'G0 = no ar (aproximação e recuo). G1 = cortando. X continua sendo diâmetro.'
+             : 'Peça gerada na hora. Mesma leitura de sempre: X diâmetro, Z negativo para dentro.',
+    brief:`Desafio aleatório (${nivel}) — ${pts.length} linhas nesta rodada.`,
+    pts,
+    hints:[
+      'X é diâmetro, Z é o comprimento medido a partir da face (negativo para a esquerda).',
+      isG ? 'Aproximação e recuo não cortam nada → G0. Todo bloco que toca material → G1.'
+          : 'Degrau reto: um dos dois eixos não muda entre as linhas.',
+      useSafe ? 'O ponto de segurança não aparece no desenho: X grande e Z POSITIVO.'
+              : (modes[0]==='inc'||modes[0]==='both') ? 'Confira a soma dos incrementais com o último valor absoluto.'
+              : 'X é diâmetro, Z negativo para dentro — sem coluna extra aqui.'
+    ]
+  };
+}

@@ -1,0 +1,14 @@
+{
+  "name": "CNC Coordenadas — O Jogo",
+  "short_name": "CNC Coord",
+  "description": "Jogo de treino de coordenadas de torno CNC: absolutas, incrementais e G-code.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
