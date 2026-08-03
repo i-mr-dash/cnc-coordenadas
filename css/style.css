@@ -266,14 +266,14 @@ button{font-family:inherit}
 .rewards{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 .rw{background:var(--panel2);border:1px solid var(--line);padding:8px 14px;border-radius:10px;font-weight:700;font-size:13px}
 .explain-body{max-height:56vh;max-height:56dvh;overflow-x:hidden;overflow-y:auto;font-size:14px;line-height:1.6;overscroll-behavior:contain;
-  scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;color:var(--ink)!important}
 .explain-body::-webkit-scrollbar,.tablewrap::-webkit-scrollbar{width:8px;height:8px}
 .explain-body::-webkit-scrollbar-track,.tablewrap::-webkit-scrollbar-track{background:transparent}
 .explain-body::-webkit-scrollbar-thumb,.tablewrap::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
-.explain-body .exrow{border-left:3px solid var(--acc2);background:var(--panel2);padding:10px 14px;border-radius:0 10px 10px 0;margin-bottom:8px}
-.explain-body .exrow b{color:var(--acc)}
-.explain-body .exrow em{color:var(--acc2);font-style:normal;font-weight:700}
-.explain-body h4{margin:14px 0 8px;color:var(--acc2);font-size:13px;text-transform:uppercase;letter-spacing:1px}
+.explain-body .exrow{border-left:3px solid var(--acc2);background:var(--panel2);padding:10px 14px;border-radius:0 10px 10px 0;margin-bottom:8px;color:var(--ink)!important}
+.explain-body .exrow b{color:var(--acc)!important}
+.explain-body .exrow em{color:var(--acc2)!important;font-style:normal;font-weight:700}
+.explain-body h4{margin:14px 0 8px;color:var(--acc2)!important;font-size:13px;text-transform:uppercase;letter-spacing:1px}
 
 /* ---------- tutorial ---------- */
 .tutor{position:fixed;inset:0;z-index:60;display:none;pointer-events:auto}
