@@ -215,17 +215,22 @@ button{font-family:inherit}
   width:min(460px,92vw);max-width:100%;box-sizing:border-box;
   background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:26px;visibility:hidden;
   box-shadow:var(--shadow);text-align:center;transition:.25s;
-  max-height:calc(100dvh - 28px);overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
   scrollbar-width:thin;scrollbar-color:var(--line) transparent;
+  /* defensivo: alguma extensão/ferramenta do navegador injeta CSS que colapsa
+     a altura destes modais (visto em Edge). Força layout, altura e teto corretos. */
+  display:flex!important;flex-direction:column!important;height:auto!important;min-height:fit-content!important;
+  max-height:calc(100dvh - 28px)!important;
 }
 .modal::-webkit-scrollbar{width:8px}
 .modal::-webkit-scrollbar-track{background:transparent}
 .modal::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
 .modal::-webkit-scrollbar-thumb:hover{background:var(--muted)}
-.modal.wide{width:min(760px,94vw);text-align:left;display:flex;flex-direction:column;max-height:min(88vh,88dvh);padding:20px 22px}
-.modal.wide h2,.modal.wide .modal-actions{flex:0 0 auto}
+.modal.wide{width:min(760px,94vw);text-align:left;padding:20px 22px;
+  max-height:min(88vh,88dvh)!important;height:auto!important;min-height:0!important;}
+.modal.wide h2,.modal.wide .modal-actions{flex:0 0 auto!important}
 .modal.wide .modal-actions{margin-top:12px}
-.modal.wide .explain-body{flex:1;min-height:0;max-height:none}
+.modal.wide .explain-body{flex:1 1 auto!important;min-height:0!important;max-height:none}
 .modal.on{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto;visibility:visible}
 .modal h2{margin:0 0 8px;font-size:22px}
 .modal p{color:var(--muted);margin:0 0 14px;font-size:14px}
