@@ -1213,7 +1213,9 @@ function _draw(){
   const safes=P.lv.pts.filter(p=>p.safe);
   if(safes.length){
     ctx.fillStyle=C.muted; ctx.font='11px '+CVFONT; ctx.textAlign='right';
-    ctx.fillText('⌖ '+safes.map(s=>s.id).join(', ')+' = ponto de segurança (fora do desenho)', W-14, H-8);
+    const rotulo = safes.length>1 ? 'pontos de segurança' : 'ponto de segurança';
+    const lista = safes.map(s=>`${s.id} (X${fmt(s.x)} Z${fmt(s.z)})`).join(', ');
+    ctx.fillText('⌖ '+lista+' = '+rotulo+' (fora do desenho)', W-14, H-8);
   }
 }
 function arrow(c,x1,y1,x2,y2){
