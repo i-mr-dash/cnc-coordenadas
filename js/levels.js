@@ -87,7 +87,7 @@ const LEVELS = [
 },
 {
   id:5, name:'Lado a Lado', sub:'A mesma peça nas duas colunas', modes:['both'], boss:false,
-  tip:'Preencha TODA a coluna absoluta primeiro. A incremental é só a subtração de uma linha para a outra.',
+  tip:'X é sempre diâmetro, Z negativo entra na peça — as mesmas regras de sempre, agora nas quatro colunas.',
   brief:'A peça da fase 3 de novo — agora com as quatro colunas. Sem chanfro, sem cone: só o método.',
   pts:[
     {id:'A', x:0,  z:0,   note:'centro da face'},
@@ -104,7 +104,7 @@ const LEVELS = [
 },
 {
   id:6, name:'Duas Colunas', sub:'Absoluta e incremental juntas', modes:['both'], boss:false,
-  tip:'Preencha a absoluta primeiro; a incremental é só a subtração de uma linha para a outra.',
+  tip:'Confira cada ponto com o desenho: qual diâmetro e qual comprimento ele mostra ali?',
   brief:'Agora as duas tabelas ao mesmo tempo, como na folha de processo.',
   pts:[
     {id:'A', x:0,  z:0},
