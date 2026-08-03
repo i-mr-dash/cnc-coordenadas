@@ -209,9 +209,15 @@ function renderMap(){
   $('#mapStats').innerHTML =
     `<b>${totalStars()} / ${MAX_STARS} ★</b> · ${feitas} de ${LEVELS.length} fases · ${perfect} peça(s) perfeita(s)`;
   const bossLv=LEVELS.find(l=>l.boss && !isUnlocked(l));
-  if(bossLv) $('#mapStats').insertAdjacentHTML('beforeend',
-    `<span class="goal"><i style="width:${Math.min(100,totalStars()/BOSS_STARS*100)}%"></i></span>
-     <span class="goal-txt">Faltam <b>${BOSS_STARS-totalStars()} ★</b> para o CHEFE (fase ${bossLv.id})</span>`);
+  if(bossLv){
+    const faltamEstrelas=Math.max(0,BOSS_STARS-totalStars());
+    const txt = faltamEstrelas>0
+      ? `Faltam <b>${faltamEstrelas} ★</b> para o CHEFE (fase ${bossLv.id})`
+      : `Estrelas suficientes — falta completar as fases até a ${bossLv.id-1} para liberar o CHEFE`;
+    $('#mapStats').insertAdjacentHTML('beforeend',
+      `<span class="goal"><i style="width:${Math.min(100,totalStars()/BOSS_STARS*100)}%"></i></span>
+       <span class="goal-txt">${txt}</span>`);
+  }
 
   if(P && !P.won){
     const d=document.createElement('div');
@@ -693,7 +699,10 @@ function win(){
   const bst = S.best[lv.id];
   const bossLv = LEVELS.find(l=>l.boss && !isUnlocked(l));
   const proxU  = UNLOCKS.find(u=>!has(u.id));
-  const meta = bossLv ? `Faltam <b>${BOSS_STARS-totalStars()} ★</b> para liberar o CHEFE (fase ${bossLv.id}).`
+  const faltamEstrelas = bossLv ? Math.max(0,BOSS_STARS-totalStars()) : 0;
+  const meta = bossLv ? (faltamEstrelas>0
+               ? `Faltam <b>${faltamEstrelas} ★</b> para liberar o CHEFE (fase ${bossLv.id}).`
+               : `Estrelas suficientes — falta completar as fases até a ${bossLv.id-1} para liberar o CHEFE.`)
              : proxU  ? `Próximo desbloqueio: <b>${proxU.name}</b> na fase ${proxU.lvl}.` : '';
   $('#resProg').innerHTML =
     `<div class="rp-rank"><span>${rk[1]}</span><span>${nxr?`faltam ${nxr[0]-S.xp} XP → ${nxr[1]}`:'patente máxima'}</span></div>
