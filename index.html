@@ -23,7 +23,7 @@
     <div class="logo">⌖</div>
     <div>
       <div class="brand-title">CNC <span>COORDENADAS</span></div>
-      <div class="brand-sub" id="rankLabel">Aprendiz de Torno</div>
+      <div class="brand-sub" id="rankLabel">Aprendiz CNC</div>
     </div>
   </div>
 
@@ -39,6 +39,7 @@
   </div>
 
   <nav class="navbtns">
+    <button class="btn ghost" id="navChoose" title="Trocar entre Torno e Fresa">⇄ Máquina</button>
     <button class="btn ghost" id="navMap">Mapa</button>
     <button class="btn ghost" id="navShop">Loja</button>
     <button class="btn ghost" id="navHelp">Manual</button>
@@ -47,10 +48,32 @@
 
 <main id="app" tabindex="-1">
 
+  <!-- ============ ESCOLHA DE MÁQUINA ============ -->
+  <section id="screen-choose" class="screen">
+    <div class="map-head">
+      <h1>Escolha a máquina</h1>
+      <p>Seu XP, moedas e patente valem para as duas — estrelas e recordes ficam separados por trilha.</p>
+    </div>
+    <div id="chooseTrack" class="map-track">
+      <div class="node" tabIndex="0" role="button" data-machine="torno">
+        <div class="num">TRILHA</div>
+        <div class="nm">Torno CNC</div>
+        <div class="sb">Torneamento — X é diâmetro, Z é comprimento. 15 fases + Modo Infinito.</div>
+        <div class="st" aria-hidden="true">⚙</div>
+      </div>
+      <div class="node" tabIndex="0" role="button" data-machine="fresa">
+        <div class="num">TRILHA</div>
+        <div class="nm">Fresa CNC</div>
+        <div class="sb">Fresamento — vista de topo, X e Y no plano. 15 fases + Modo Infinito.</div>
+        <div class="st" aria-hidden="true">⛏</div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ MAPA DE FASES ============ -->
   <section id="screen-map" class="screen active">
     <div class="map-head">
-      <h1>Trilha do Torneiro</h1>
+      <h1 id="mapTitle">Trilha do Torneiro</h1>
       <p id="mapStats">Complete as fases para desbloquear ferramentas, temas e novos desafios.</p>
     </div>
     <div id="mapTrack" class="map-track"></div>
@@ -88,8 +111,8 @@
         <canvas id="cv" role="img" aria-label="Desenho técnico da peça"></canvas>
         <div class="legend">
           <span><i class="dot"></i> pontos do perfil</span>
-          <span><i class="ln"></i> linha de centro</span>
-          <span>W = zero-peça (face direita)</span>
+          <span id="legendCenter"><i class="ln"></i> linha de centro</span>
+          <span id="legendZero">W = zero-peça (face direita)</span>
         </div>
       </div>
 
@@ -179,7 +202,7 @@
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <canvas id="fx"></canvas>
 
-<script src="js/levels.js?v=8"></script>
-<script src="js/game.js?v=7"></script>
+<script src="js/levels.js?v=9"></script>
+<script src="js/game.js?v=9"></script>
 </body>
 </html>

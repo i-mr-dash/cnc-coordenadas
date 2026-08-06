@@ -16,8 +16,8 @@ const APONTE  = TOUCH ? 'Toque nessa linha da tabela (ou no ponto do desenho)'
 
 /* ---------------- progressão ---------------- */
 const RANKS = [
-  [0,'Aprendiz de Torno'], [150,'Operador Júnior'], [400,'Torneiro'],
-  [700,'Programador CNC'], [1000,'Mestre CNC'], [1200,'Lenda do Torno']
+  [0,'Aprendiz CNC'], [150,'Operador Júnior'], [400,'Operador CNC'],
+  [700,'Programador CNC'], [1000,'Mestre CNC'], [1200,'Lenda do CNC']
 ];
 const UNLOCKS = [
   {lvl:2,  id:'shop',        name:'Oficina / Loja',  desc:'Agora você pode gastar moedas em ferramentas.'},
@@ -40,13 +40,33 @@ const THEMES = [
 ];
 const REVEAL_COST = 40;
 const TOL = 0.005;
-const MAX_STARS  = LEVELS.length*3;
-const BOSS_STARS = Math.round(MAX_STARS*0.5);
+
+/* ---------------- máquina (torno / fresa) ---------------- */
+const MACHINES = {
+  torno:{ trilha:'Trilha do Torneiro', legend:'W = zero-peça (face direita)' },
+  fresa:{ trilha:'Trilha do Fresador', legend:'W = canto de referência da peça' }
+};
+let LEVELS = LEVELS_TORNO;                    // array ativo — reatribuído por switchMachine()
+const levelsFor = m => m==='fresa' ? LEVELS_FRESA : LEVELS_TORNO;
+const skey = lv => (lv.machine||S.machine)+'_'+lv.id;   // chave namespaced p/ stars/best
+const maxStarsFor  = m => levelsFor(m).length*3;
+const bossStarsFor = m => Math.round(maxStarsFor(m)*0.5);
+const starsForMachine = m => { const p=m+'_'; let t=0;
+  for(const k in S.stars) if(k.startsWith(p)) t+=(+S.stars[k]||0); return t; };
+let MAX_STARS=maxStarsFor('torno'), BOSS_STARS=bossStarsFor('torno');
+const makeEndless = run => S.machine==='fresa' ? makeEndlessLevelFresa(run) : makeEndlessLevel(run);
+function switchMachine(m){
+  S.machine = m==='fresa' ? 'fresa' : 'torno';
+  LEVELS = levelsFor(S.machine);
+  MAX_STARS=maxStarsFor(S.machine); BOSS_STARS=bossStarsFor(S.machine);
+  save();
+}
 
 /* ---------------- estado ---------------- */
 const DEF = {xp:0, coins:0, hints:3, stars:{}, unlocked:[], owned:[], theme:'steel',
-             tutorial:false, endlessRun:0, best:{}, streak:0, bestStreak:0};
+             tutorial:false, endlessRun:0, best:{}, streak:0, bestStreak:0, machine:'torno'};
 let S = load();
+LEVELS = levelsFor(S.machine); MAX_STARS=maxStarsFor(S.machine); BOSS_STARS=bossStarsFor(S.machine);
 function load(){
   let txt=localStorage.getItem(KEY), legado=false;
   if(txt==null){                                   // migra saves das versões anteriores
@@ -59,6 +79,10 @@ function load(){
     const re=o=>{ const n={}; for(const k in (o||{})) n[MAP[k]||k]=o[k]; return n; };
     raw.stars=re(raw.stars); raw.best=re(raw.best);
   }
+  /* saves de antes do Modo Fresa: chaves de stars/best eram numéricas puras (sem prefixo torno_/fresa_) */
+  const namespacea=o=>{ const n={}; for(const k in (o||{}))
+    n[/^(torno|fresa)_/.test(k)?k:'torno_'+k]=o[k]; return n; };
+  raw.stars=namespacea(raw.stars); raw.best=namespacea(raw.best);
   const s=sanitize(raw);
   if(legado){ try{ localStorage.setItem(KEY, JSON.stringify(s)); }catch(e){} }
   return s;
@@ -68,7 +92,7 @@ function sanitize(raw){
   const arr=v=> Array.isArray(v)?v.filter(x=>typeof x==='string'):[];
   const obj=v=> (v&&typeof v==='object'&&!Array.isArray(v))?v:{};
   const s={...DEF};
-  const IDS=new Set(LEVELS.map(l=>String(l.id)));
+  const IDS=new Set([...LEVELS_TORNO.map(l=>'torno_'+l.id), ...LEVELS_FRESA.map(l=>'fresa_'+l.id)]);
   const cap=(v,d,max)=>Math.max(0,Math.min(Math.floor(num(v,d)),max));
   const clampObj=(v,max)=>{ const o={};
     for(const k in obj(v)){ if(!IDS.has(String(k))) continue;
@@ -90,6 +114,7 @@ function sanitize(raw){
   s.owned=s.owned.filter(x=>OK_OWN.has(x));
   const th = raw.theme==='blue' ? 'blueprint' : raw.theme;
   s.theme = THEMES.some(t=>t.t===th) ? th : 'steel';
+  s.machine = raw.machine==='fresa' ? 'fresa' : 'torno';
   return s;
 }
 function save(){
@@ -185,41 +210,61 @@ function show(id){
   if(id==='map') renderMap();
   if(id==='shop') renderShop();
   if(id==='help') renderHelp();
+  if(id==='choose') renderChoose();
   window.scrollTo({top:0,behavior:REDUCED?'auto':'smooth'});
   const h1=sc.querySelector('h1'); if(h1){ h1.tabIndex=-1; h1.focus({preventScroll:true}); }
 }
+$('#navChoose').onclick=()=>show('choose');
 $('#navMap').onclick =()=>show('map');
 $('#navShop').onclick=()=>{ if(!has('shop')){toast('A Loja abre ao completar a fase 2.');return;} show('shop'); };
 $('#navHelp').onclick=()=>show('help');
 $('#btnBack').onclick=()=>show('map');
 
+/* ---------------- escolha de máquina ---------------- */
+function renderChoose(){
+  $$('#chooseTrack [data-machine]').forEach(d=>{
+    const m=d.dataset.machine, on=S.machine===m, st=starsForMachine(m);
+    d.classList.toggle('cur',on);
+    d.setAttribute('aria-pressed',on);
+    let rec=d.querySelector('.rec'); if(!rec){ rec=document.createElement('div'); rec.className='rec'; d.appendChild(rec); }
+    rec.textContent = `${st} / ${maxStarsFor(m)} ★${on?' · trilha atual':''}`;
+  });
+}
+$$('#chooseTrack [data-machine]').forEach(d=>{
+  const act=()=>{ switchMachine(d.dataset.machine); show('map'); };
+  d.onclick=act;
+  d.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); act(); }});
+});
+
 /* ---------------- mapa ---------------- */
 function isUnlocked(lv){
   const i=LEVELS.indexOf(lv);
   if(i<=0) return true;
-  if(S.stars[lv.id]) return true;
-  if(!done(LEVELS[i-1].id)) return false;
-  if(lv.boss) return totalStars()>=BOSS_STARS;
+  if(S.stars[skey(lv)]) return true;
+  if(!done(skey(LEVELS[i-1]))) return false;
+  if(lv.boss) return starsForMachine(S.machine)>=BOSS_STARS;
   return true;
 }
 function renderMap(){
   const t=$('#mapTrack'); t.innerHTML='';
-  const perfect=LEVELS.filter(l=>(S.stars[l.id]||0)===3).length;
-  const feitas =LEVELS.filter(l=>done(l.id)).length;
+  const trackStars=starsForMachine(S.machine);
+  $('#mapTitle').textContent = MACHINES[S.machine].trilha;
+  const perfect=LEVELS.filter(l=>(S.stars[skey(l)]||0)===3).length;
+  const feitas =LEVELS.filter(l=>done(skey(l))).length;
   $('#mapStats').innerHTML =
-    `<b>${totalStars()} / ${MAX_STARS} ★</b> · ${feitas} de ${LEVELS.length} fases · ${perfect} peça(s) perfeita(s)`;
+    `<b>${trackStars} / ${MAX_STARS} ★</b> · ${feitas} de ${LEVELS.length} fases · ${perfect} peça(s) perfeita(s)`;
   const bossLv=LEVELS.find(l=>l.boss && !isUnlocked(l));
   if(bossLv){
-    const faltamEstrelas=Math.max(0,BOSS_STARS-totalStars());
+    const faltamEstrelas=Math.max(0,BOSS_STARS-trackStars);
     const txt = faltamEstrelas>0
       ? `Faltam <b>${faltamEstrelas} ★</b> para o CHEFE (fase ${bossLv.id})`
       : `Estrelas suficientes — falta completar as fases até a ${bossLv.id-1} para liberar o CHEFE`;
     $('#mapStats').insertAdjacentHTML('beforeend',
-      `<span class="goal"><i style="width:${Math.min(100,totalStars()/BOSS_STARS*100)}%"></i></span>
+      `<span class="goal"><i style="width:${Math.min(100,trackStars/BOSS_STARS*100)}%"></i></span>
        <span class="goal-txt">${txt}</span>`);
   }
 
-  if(P && !P.won){
+  if(P && !P.won && (P.lv.machine||S.machine)===S.machine){
     const d=document.createElement('div');
     d.className='node cur'; d.tabIndex=0; d.setAttribute('role','button');
     d.innerHTML=`<div class="num">EM ANDAMENTO</div><div class="nm">Retomar</div>
@@ -232,7 +277,7 @@ function renderMap(){
   }
   let curMarked=false;
   LEVELS.forEach(lv=>{
-    const st=S.stars[lv.id]||0, open=isUnlocked(lv), b=S.best[lv.id];
+    const st=S.stars[skey(lv)]||0, open=isUnlocked(lv), b=S.best[skey(lv)];
     const cur = open && st===0 && !curMarked; if(cur) curMarked=true;
     const d=document.createElement('div');
     d.className='node'+(open?'':' locked')+(lv.boss?' boss':'')+(cur?' cur':'');
@@ -247,12 +292,12 @@ function renderMap(){
       <div class="st" aria-hidden="true">${[1,2,3].map(i=>i<=st?'<b>★</b>':'☆').join('')}</div>
       ${b?`<div class="rec">⏱ ${mmss(b)}</div>`:''}
       ${lv.boss?'<div class="badge">CHEFE</div>':''}
-      ${lv.boss&&!open?`<div class="gate">Requer ${BOSS_STARS} ★ — você tem ${totalStars()}</div>`:''}
+      ${lv.boss&&!open?`<div class="gate">Requer ${BOSS_STARS} ★ — você tem ${trackStars}</div>`:''}
       ${open?'':'<div class="lock" aria-hidden="true">🔒</div>'}`;
     const act = open
       ? ()=>startLevel(lv)
-      : ()=>toast(lv.boss && done(LEVELS[LEVELS.indexOf(lv)-1].id)
-          ? `O CHEFE exige ${BOSS_STARS} ★. Você tem ${totalStars()} — refaça fases para pegar 3 ★.`
+      : ()=>toast(lv.boss && done(skey(LEVELS[LEVELS.indexOf(lv)-1]))
+          ? `O CHEFE exige ${BOSS_STARS} ★. Você tem ${trackStars} — refaça fases para pegar 3 ★.`
           : 'Complete a fase anterior primeiro.', 4000);
     d.onclick=act;
     d.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); act(); }});
@@ -267,7 +312,7 @@ function renderMap(){
       <div class="st" aria-hidden="true">∞</div>
       <div class="rec">🔥 sequência ${S.streak} · recorde ${S.bestStreak}</div>
       <div class="badge">∞</div>`;
-    const act=()=>startLevel(makeEndlessLevel(S.endlessRun+1));
+    const act=()=>startLevel(makeEndless(S.endlessRun+1));
     d.onclick=act;
     d.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); act(); }});
     t.appendChild(d);
@@ -278,15 +323,18 @@ function renderMap(){
 }
 
 /* ---------------- colunas por modo ---------------- */
-const KLBL={ax:'X (absoluto)', az:'Z (absoluto)', ix:'ΔX', iz:'ΔZ', g:'função G'};
+const KLBL_TORNO={ax:'X (absoluto)', az:'Z (absoluto)', ix:'ΔX', iz:'ΔZ', g:'função G'};
+const KLBL_FRESA={ax:'X (absoluto)', az:'Y (absoluto)', ix:'ΔX', iz:'ΔY', g:'função G'};
+const klblFor = m => m==='fresa' ? KLBL_FRESA : KLBL_TORNO;
 function colsOf(lv){
-  const m=lv.modes[0];
-  if(m==='abs')  return [{k:'ax',h:'X',g:'ABSOLUTAS'},{k:'az',h:'Z',g:'ABSOLUTAS'}];
-  if(m==='inc')  return [{k:'ix',h:'ΔX (U)',g:'INCREMENTAIS'},{k:'iz',h:'ΔZ (W)',g:'INCREMENTAIS'}];
-  if(m==='both') return [{k:'ax',h:'X',g:'ABSOLUTAS'},{k:'az',h:'Z',g:'ABSOLUTAS'},
-                         {k:'ix',h:'ΔX',g:'INCREMENTAIS'},{k:'iz',h:'ΔZ',g:'INCREMENTAIS'}];
+  const m=lv.modes[0], fresa=(lv.machine||S.machine)==='fresa';
+  const Z=fresa?'Y':'Z';
+  if(m==='abs')  return [{k:'ax',h:'X',g:'ABSOLUTAS'},{k:'az',h:Z,g:'ABSOLUTAS'}];
+  if(m==='inc')  return [{k:'ix',h:fresa?'ΔX':'ΔX (U)',g:'INCREMENTAIS'},{k:'iz',h:fresa?'Δ'+Z:'ΔZ (W)',g:'INCREMENTAIS'}];
+  if(m==='both') return [{k:'ax',h:'X',g:'ABSOLUTAS'},{k:'az',h:Z,g:'ABSOLUTAS'},
+                         {k:'ix',h:'ΔX',g:'INCREMENTAIS'},{k:'iz',h:'Δ'+Z,g:'INCREMENTAIS'}];
   if(m!=='gcode') console.warn('modo desconhecido:',m);
-  return [{k:'g',h:'Função',g:'BLOCO'},{k:'ax',h:'X',g:'BLOCO'},{k:'az',h:'Z',g:'BLOCO'}];
+  return [{k:'g',h:'Função',g:'BLOCO'},{k:'ax',h:'X',g:'BLOCO'},{k:'az',h:Z,g:'BLOCO'}];
 }
 function expected(lv,r,k){
   const p=lv.pts[r], pv=r>0?lv.pts[r-1]:{x:0,z:0};
@@ -301,12 +349,16 @@ function expected(lv,r,k){
 /* ---------------- iniciar fase ---------------- */
 function startLevel(lv){
   clearTimeout(startLevel._tut);
+  lv.machine = lv.machine || S.machine;
   P={lv, tries:0, hints:0, revealed:0, borrowed:false, t0:Date.now(),
      assisted:false, safetyUsed:false, won:false, hl:-1};
   for(const k in HINT_TIER) delete HINT_TIER[k];
+  const fresa=lv.machine==='fresa';
+  $('#legendCenter').style.display = fresa?'none':'';
+  $('#legendZero').textContent = MACHINES[lv.machine].legend;
   $('#lvName').textContent = lv.endless ? lv.name : `Fase ${lv.id} — ${lv.name}`;
   $('#lvSub').textContent=lv.brief;
-  $('#chipMode').textContent=MODE_LABEL[lv.modes[0]];
+  $('#chipMode').textContent=(fresa?MODE_LABEL_FRESA:MODE_LABEL)[lv.modes[0]];
   $('#chipTry').textContent='Tentativas: 0';
   $('#tipLine').textContent=lv.tip;
   $('#feedback').textContent=''; $('#feedback').className='feedback';
@@ -317,14 +369,16 @@ function startLevel(lv){
   show('play');
   resize(); draw();
   cv.setAttribute('aria-label','Desenho técnico da peça. Pontos do perfil: '+
-    lv.pts.filter(p=>!p.safe).map(p=>`${p.id} diâmetro ${fmt(p.x)}, Z ${fmt(p.z)}`).join('; '));
+    (lv.machine==='fresa'
+      ? lv.pts.filter(p=>!p.safe).map(p=>`${p.id} X ${fmt(p.x)}, Y ${fmt(p.z)}`).join('; ')
+      : lv.pts.filter(p=>!p.safe).map(p=>`${p.id} diâmetro ${fmt(p.x)}, Z ${fmt(p.z)}`).join('; ')));
   clearInterval(timer);
   $('#chipTime').textContent='00:00';
   timer=setInterval(()=>{
     const s=Math.floor((Date.now()-P.t0)/1000);
     $('#chipTime').textContent=mmss(s);
   },1000);
-  if(!S.tutorial && lv.id===1) startLevel._tut=setTimeout(startTutorial,420);
+  if(!S.tutorial && lv.machine==='torno' && lv.id===1) startLevel._tut=setTimeout(startTutorial,420);
 }
 
 function resumeLevel(){
@@ -432,7 +486,7 @@ const firstBadCell = () => cellsOf().map(cellInfo).find(c=>!c.ok) || null;
 const NUMRE=/^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 function parseNum(v){
   v=String(v==null?'':v).trim().toLowerCase()
-     .replace(/^[xzuw]\s*/,'').replace(/^ø\s*/,'').replace(/\s*mm$/,'')
+     .replace(/^[xyzuw]\s*/,'').replace(/^ø\s*/,'').replace(/\s*mm$/,'')
      .replace(',','.').replace(/\s+/g,'');
   if(!NUMRE.test(v)) return NaN;
   return +v;
@@ -440,7 +494,16 @@ function parseNum(v){
 
 /* ---------------- linguagem didática ---------------- */
 function describeMove(a,b){
+  const fresa=(P&&P.lv&&(P.lv.machine||S.machine))==='fresa';
   if(a.x===b.x && a.z===b.z) return 'a ferramenta não sai do lugar.';
+  if(fresa){
+    if(a.x===b.x) return `só o eixo <b>Y</b> muda — lado reto do contorno, X continua ${fmt(b.x)}.`;
+    if(a.z===b.z) return `é um <b>degrau reto</b>: só o eixo <b>X</b> muda, o Y continua ${fmt(b.z)}.`;
+    const dx=Math.abs(b.x-a.x), dy=Math.abs(b.z-a.z);
+    if(b.arc) return `é um <b>raio de canto R${fmt(b.arc)}</b>: a curva desloca ${fmt(b.arc)} mm em X e ${fmt(b.arc)} mm em Y — é curva, não corte reto.`;
+    if(Math.abs(dx-dy)<TOL) return `é um <b>canto cortado a 45°</b>: anda ${fmt(dx)} mm em X e ${fmt(dy)} mm em Y, os dois iguais.`;
+    return `é um <b>trecho diagonal</b>: X e Y mudam no mesmo trecho (ΔX ${fmt(b.x-a.x)}, ΔY ${fmt(b.z-a.z)}).`;
+  }
   if(a.x===b.x) return `só o <b>comprimento</b> muda — trecho cilíndrico, o diâmetro continua ø${fmt(b.x)}.`;
   if(a.z===b.z) return `é um <b>degrau reto</b>: só o <b>diâmetro</b> muda, o Z continua ${fmt(b.z)}.`;
   const dz=Math.abs(b.z-a.z), dr=Math.abs(b.x-a.x)/2;
@@ -449,46 +512,50 @@ function describeMove(a,b){
   return `é um <b>cone</b>: X e Z mudam no mesmo trecho (ΔX ${fmt(b.x-a.x)}, ΔZ ${fmt(b.z-a.z)}).`;
 }
 function diagnose(c){
-  const lv=P.lv, r=c.r, p=c.p, pv=r>0?lv.pts[r-1]:{x:0,z:0,id:'a origem'}, nx=lv.pts[r+1];
-  const v=c.val, e=c.exp;
-  if(c.blank) return {code:'vazio', msg:`A célula <b>${KLBL[c.k]}</b> do ponto <b>${p.id}</b> está vazia. De ${pv.id} para ${p.id} ${describeMove(pv,p)}`};
+  const lv=P.lv, fresa=(lv.machine||S.machine)==='fresa', r=c.r, p=c.p,
+        pv=r>0?lv.pts[r-1]:{x:0,z:0,id:'a origem'}, nx=lv.pts[r+1];
+  const v=c.val, e=c.exp, K=klblFor(lv.machine||S.machine);
+  if(c.blank) return {code:'vazio', msg:`A célula <b>${K[c.k]}</b> do ponto <b>${p.id}</b> está vazia. De ${pv.id} para ${p.id} ${describeMove(pv,p)}`};
   if(c.bad)   return {code:'formato', msg:`O valor digitado em <b>${p.id}</b> não é um número. Use só dígitos, ponto ou vírgula e o sinal (ex.: <b>-20</b>).`};
   if(c.k==='g') return {code:'gcode',
     msg:`No bloco <b>${p.id}</b> ${e==='G0'?'a ferramenta se desloca <b>sem tirar cavaco</b>':'a ferramenta está <b>tirando cavaco</b>'} → <b>${e}</b>. Regra: <b>G0</b> só no ar; qualquer contato com o material é <b>G1</b>.`};
   if(r>0 && eq(v, expected(lv,r-1,c.k))) return {code:'linha',
-    msg:`Em <b>${p.id}</b> o valor <b>${fmt(v)}</b> é o mesmo da linha de cima (${pv.id}). De ${pv.id} para ${p.id} ${describeMove(pv,p)} Se você quis escrever o raio, lembre que X é sempre <b>diâmetro</b>.`};
-  if((c.k==='ax'||c.k==='ix') && e!==0 && eq(v*2,e)) return {code:'raio',
+    msg:`Em <b>${p.id}</b> o valor <b>${fmt(v)}</b> é o mesmo da linha de cima (${pv.id}). De ${pv.id} para ${p.id} ${describeMove(pv,p)}`+(fresa?'':' Se você quis escrever o raio, lembre que X é sempre <b>diâmetro</b>.')};
+  if(!fresa && (c.k==='ax'||c.k==='ix') && e!==0 && eq(v*2,e)) return {code:'raio',
     msg:`No ponto <b>${p.id}</b> você escreveu <b>${fmt(v)}</b>, que é o <b>raio</b>. X é sempre <b>diâmetro</b>: ${fmt(v)} × 2 = <b>ø${fmt(e)}</b>.`};
-  if((c.k==='ax'||c.k==='ix') && e!==0 && eq(v,e*2)) return {code:'dobro',
+  if(!fresa && (c.k==='ax'||c.k==='ix') && e!==0 && eq(v,e*2)) return {code:'dobro',
     msg:`No ponto <b>${p.id}</b> o valor ficou o dobro. A cota <b>ø${fmt(e)}</b> do desenho já é o diâmetro — não multiplique por 2.`};
   if(e!==0 && eq(v,-e)) return {code:'sinal',
     msg:`Em <b>${p.id}</b> o número está certo, o <b>sinal</b> não. `+
-      (c.k==='az'||c.k==='iz'
-        ? (e<0 ? `A peça cresce para a <b>esquerda</b> do zero-peça W: dentro do material é <b>negativo</b> → <b>Z${fmt(e)}</b>.`
-               : `Esse ponto está <b>antes</b> da face, no ar → <b>Z+${fmt(e)}</b>.`)
-        : c.k==='ax'
-          ? `Diâmetro não tem sinal negativo: o X absoluto é sempre positivo (ou X0 na linha de centro) → <b>X${fmt(e)}</b>.`
-          : `Aqui o diâmetro ${e>0?'aumenta':'diminui'}, então o Δ é <b>${e>0?'positivo':'negativo'}</b>: <b>${fmt(e)}</b>.`)};
+      (fresa
+        ? `Esse ponto fica do lado <b>${e<0?'negativo':'positivo'}</b> do eixo ${c.k==='ax'||c.k==='ix'?'X':'Y'} → <b>${fmt(e)}</b>.`
+        : (c.k==='az'||c.k==='iz'
+          ? (e<0 ? `A peça cresce para a <b>esquerda</b> do zero-peça W: dentro do material é <b>negativo</b> → <b>Z${fmt(e)}</b>.`
+                 : `Esse ponto está <b>antes</b> da face, no ar → <b>Z+${fmt(e)}</b>.`)
+          : c.k==='ax'
+            ? `Diâmetro não tem sinal negativo: o X absoluto é sempre positivo (ou X0 na linha de centro) → <b>X${fmt(e)}</b>.`
+            : `Aqui o diâmetro ${e>0?'aumenta':'diminui'}, então o Δ é <b>${e>0?'positivo':'negativo'}</b>: <b>${fmt(e)}</b>.`))};
   const twin={ax:'az',az:'ax',ix:'iz',iz:'ix'}[c.k];
   if(twin && eq(v, expected(lv,r,twin))) return {code:'inverteu',
-    msg:`Em <b>${p.id}</b> as colunas foram trocadas: <b>${fmt(v)}</b> é o valor de <b>${KLBL[twin]}</b>. X é o diâmetro (vertical); Z é o comprimento (horizontal).`};
+    msg:`Em <b>${p.id}</b> as colunas foram trocadas: <b>${fmt(v)}</b> é o valor de <b>${K[twin]}</b>. `+
+      (fresa ? 'X e Y são os dois eixos do plano — não confunda um com o outro.' : 'X é o diâmetro (vertical); Z é o comprimento (horizontal).')};
   if((c.k==='ax'||c.k==='az') && eq(v, expected(lv,r,c.k==='ax'?'ix':'iz'))){
     const base=c.k==='ax'?pv.x:pv.z;
-    return {code:'incAbs', msg: c.k==='ax'
+    return {code:'incAbs', msg: (!fresa && c.k==='ax')
       ? `Você escreveu <b>quanto o diâmetro variou</b> desde ${pv.id}. A coluna absoluta pede o <b>diâmetro cheio</b> naquele ponto: ${fmt(base)} ${v>=0?'+':'−'} ${fmt(Math.abs(v))} = <b>ø${fmt(e)}</b>.`
-      : `Você escreveu <b>quanto andou</b> desde ${pv.id}. A coluna absoluta pede a distância até o <b>zero-peça W</b>: ${fmt(base)} ${v>=0?'+':'−'} ${fmt(Math.abs(v))} = <b>${fmt(e)}</b>.`};
+      : `Você escreveu <b>quanto andou</b> desde ${pv.id}. A coluna absoluta pede a distância até o <b>${fresa?'canto de referência':'zero-peça W'}</b>: ${fmt(base)} ${v>=0?'+':'−'} ${fmt(Math.abs(v))} = <b>${fmt(e)}</b>.`};
   }
   if((c.k==='ix'||c.k==='iz') && eq(v, expected(lv,r,c.k==='ix'?'ax':'az'))){
     const a=c.k==='ix'?p.x:p.z, b=c.k==='ix'?pv.x:pv.z;
     return {code:'absInc', msg:`Você repetiu a coordenada <b>absoluta</b>. A coluna Δ pede a <b>diferença</b>: ${fmt(a)} − ${fmt(b)} = <b>${fmt(e)}</b>.`};
   }
-  if(c.k==='ax' && nx){
+  if(!fresa && c.k==='ax' && nx){
     const C=Math.abs(nx.z-p.z);
     if(C>0 && eq(e, nx.x-2*C) && eq(v, nx.x-C)) return nx.arc
       ? {code:'chanfro', msg:`Raio <b>R${fmt(nx.arc)}</b>: o arco começa ${fmt(nx.arc)} mm antes no <b>raio</b>, ou seja <b>${fmt(2*nx.arc)} mm no diâmetro</b>. ø${fmt(nx.x)} − 2×${fmt(nx.arc)} = <b>ø${fmt(e)}</b>.`}
       : {code:'chanfro', msg:`Chanfro <b>${fmt(C)}x45°</b> tira ${fmt(C)} mm <b>de cada lado</b> = <b>${fmt(2*C)} mm no diâmetro</b>. ø${fmt(nx.x)} − 2×${fmt(C)} = <b>ø${fmt(e)}</b>.`};
   }
-  return {code:'geral', msg:`Ponto <b>${p.id}</b>, coluna <b>${KLBL[c.k]}</b>: de ${pv.id} para ${p.id} ${describeMove(pv,p)} Releia a cota correspondente no desenho.`};
+  return {code:'geral', msg:`Ponto <b>${p.id}</b>, coluna <b>${K[c.k]}</b>: de ${pv.id} para ${p.id} ${describeMove(pv,p)} Releia a cota correspondente no desenho.`};
 }
 const TYPE_LBL={vazio:'campo em branco', formato:'formato inválido', raio:'raio no lugar do diâmetro',
   dobro:'diâmetro dobrado', sinal:'sinal trocado', inverteu:'X trocado com Z', incAbs:'incremental na coluna absoluta',
@@ -527,7 +594,7 @@ function check(){
     th.classList.toggle('colbad', !!(cols[i] && cols[i].k===worst[0])));
   const top=Object.entries(byType).filter(([k])=>k!=='geral'&&k!=='vazio').sort((a,b)=>b[1]-a[1])[0];
   fb.className='feedback bad';
-  fb.innerHTML = `<b>${bad.length} célula(s) para revisar.</b> A coluna <b>${KLBL[worst[0]]}</b> concentra ${worst[1]}.`
+  fb.innerHTML = `<b>${bad.length} célula(s) para revisar.</b> A coluna <b>${klblFor(P.lv.machine||S.machine)[worst[0]]}</b> concentra ${worst[1]}.`
     + (top?`<br>Padrão detectado: <b>${TYPE_LBL[top[0]]}</b> (${top[1]}×).`:'')
     + `<br>${bad[0]._d.msg}`;
 }
@@ -549,7 +616,7 @@ $('#btnHint').onclick=()=>{
 
   if(tier===0){
     custa=false; titulo='Onde olhar';
-    txt=`Olhe o ponto <b>${c.p.id}</b>, coluna <b>${KLBL[c.k]}</b>. ${APONTE}: o ponto acende no desenho com as linhas de leitura.`;
+    txt=`Olhe o ponto <b>${c.p.id}</b>, coluna <b>${klblFor(P.lv.machine||S.machine)[c.k]}</b>. ${APONTE}: o ponto acende no desenho com as linhas de leitura.`;
   }else if(tier===1){
     txt=diagnose(c).msg;
   }else{
@@ -580,28 +647,42 @@ $('#btnReveal').onclick=()=>{
 
 /* ---------------- explicação ---------------- */
 function explainRows(lv){
+  const fresa=(lv.machine||S.machine)==='fresa';
   const cols=colsOf(lv), hasAbs=cols.some(c=>c.k==='ax'), hasInc=cols.some(c=>c.k==='ix');
   return lv.pts.map((p,r)=>{
     const pv=r>0?lv.pts[r-1]:{x:0,z:0,id:'a origem'};
     const bits=[`<b>O trecho:</b> de ${pv.id} para ${p.id} ${describeMove(pv,p)}`];
-    if(p.safe) bits.push('<b>Onde ler:</b> este ponto não está no desenho — é posição de segurança/troca, longe da peça (X grande, Z positivo).');
+    if(p.safe) bits.push(fresa
+      ? '<b>Onde ler:</b> este ponto não está no desenho — é o ponto de aproximação, longe da peça (X e Y bem afastados, geralmente negativos).'
+      : '<b>Onde ler:</b> este ponto não está no desenho — é posição de segurança/troca, longe da peça (X grande, Z positivo).');
     if(cols.some(c=>c.k==='g'))
       bits.push(`<b>A função:</b> <em>${p.g}</em> — ${p.g==='G0'?'a ferramenta não toca o material: deslocamento rápido, sem avanço programado':'há material sendo cortado: avanço de trabalho (F)'}.`);
     if(hasAbs){
-      bits.push(p.safe
-        ? `<b>X:</b> não há cota no desenho — é posição livre, escolhida bem afastada do maior diâmetro para a torre girar sem bater → <em>X${fmt(p.x)}</em>.`
-        : p.x===0
-        ? '<b>X:</b> ferramenta na linha de centro, diâmetro zero → <em>X0</em>.'
-        : `<b>X:</b> a cota que vale aqui é <b>ø${fmt(p.x)}</b>. Como X é diâmetro (nunca raio) → <em>X${fmt(p.x)}</em>, o que no desenho são ${fmt(p.x/2)} mm acima da linha de centro.`);
-      bits.push(p.z===0
-        ? '<b>Z:</b> encostado na face de referência, que é o próprio zero-peça → <em>Z0</em>.'
-        : (p.z>0 ? `<b>Z:</b> está ${fmt(p.z)} mm <u>antes</u> da face, ainda no ar → <em>Z${fmt(p.z)}</em>.`
-                 : `<b>Z:</b> a cota de comprimento é ${fmt(-p.z)} mm a partir da face; a peça cresce para a esquerda do W → <em>Z${fmt(p.z)}</em>.`));
+      if(fresa){
+        bits.push(p.safe
+          ? `<b>X:</b> não há cota no desenho — é posição livre, bem afastada do contorno → <em>X${fmt(p.x)}</em>.`
+          : `<b>X:</b> a posição no plano nesse ponto → <em>X${fmt(p.x)}</em>.`);
+        bits.push(p.safe
+          ? `<b>Y:</b> mesma lógica, bem afastada do contorno → <em>Y${fmt(p.z)}</em>.`
+          : p.z===0
+          ? '<b>Y:</b> no canto de referência da peça → <em>Y0</em>.'
+          : `<b>Y:</b> a posição no plano nesse ponto → <em>Y${fmt(p.z)}</em>.`);
+      }else{
+        bits.push(p.safe
+          ? `<b>X:</b> não há cota no desenho — é posição livre, escolhida bem afastada do maior diâmetro para a torre girar sem bater → <em>X${fmt(p.x)}</em>.`
+          : p.x===0
+          ? '<b>X:</b> ferramenta na linha de centro, diâmetro zero → <em>X0</em>.'
+          : `<b>X:</b> a cota que vale aqui é <b>ø${fmt(p.x)}</b>. Como X é diâmetro (nunca raio) → <em>X${fmt(p.x)}</em>, o que no desenho são ${fmt(p.x/2)} mm acima da linha de centro.`);
+        bits.push(p.z===0
+          ? '<b>Z:</b> encostado na face de referência, que é o próprio zero-peça → <em>Z0</em>.'
+          : (p.z>0 ? `<b>Z:</b> está ${fmt(p.z)} mm <u>antes</u> da face, ainda no ar → <em>Z${fmt(p.z)}</em>.`
+                   : `<b>Z:</b> a cota de comprimento é ${fmt(-p.z)} mm a partir da face; a peça cresce para a esquerda do W → <em>Z${fmt(p.z)}</em>.`));
+      }
     }
     if(hasInc){
       const dx=+(p.x-pv.x).toFixed(3), dz=+(p.z-pv.z).toFixed(3);
-      bits.push(`<b>ΔX:</b> ${fmt(p.x)} − ${fmt(pv.x)} = <em>${fmt(dx)}</em>${dx===0?' — o diâmetro não mudou':''}`);
-      bits.push(`<b>ΔZ:</b> ${fmt(p.z)} − ${fmt(pv.z)} = <em>${fmt(dz)}</em>${dz===0?' — não andou no comprimento':''}`);
+      bits.push(`<b>ΔX:</b> ${fmt(p.x)} − ${fmt(pv.x)} = <em>${fmt(dx)}</em>${dx===0?(fresa?' — o X não mudou':' — o diâmetro não mudou'):''}`);
+      bits.push(`<b>Δ${fresa?'Y':'Z'}:</b> ${fmt(p.z)} − ${fmt(pv.z)} = <em>${fmt(dz)}</em>${dz===0?(fresa?' — o Y não mudou':' — não andou no comprimento'):''}`);
     }
     if(p.note) bits.push('📐 <b>No desenho:</b> '+p.note);
     return `<div class="exrow"><b>${p.id}</b> ${r>0?`<span style="opacity:.6">(vindo de ${pv.id})</span>`:''}<br>${bits.join('<br>')}</div>`;
@@ -612,14 +693,20 @@ $('#btnExplain').onclick=()=>{
     toast(`Tente primeiro! O passo a passo abre depois de mais ${3-P.tries} tentativa(s). Enquanto isso use a Dica — o nível 1 é grátis.`,4600);
     return;
   }
+  const fresa=(P.lv.machine||S.machine)==='fresa';
   $('#explainBody').innerHTML =
     `<h4>Regras que resolvem esta peça</h4>
-     <div class="exrow">${P.lv.tip}<br>
-       <em>X</em> = diâmetro lido no desenho. <em>Z</em> = distância até a face (esquerda = negativo).<br>
-       Chanfro <b>C x45°</b>: o diâmetro de entrada é <b>ø − 2C</b> e o Z avança <b>C</b>.<br>
-       Raio <b>R</b>: consome <b>R</b> no raio (<b>2R</b> no diâmetro) e <b>R</b> em Z.<br>
-       <b>Fechamento:</b> a soma dos ΔX tem que dar o último X absoluto, e a soma dos ΔZ o último Z.</div>
-     <h4>Ponto a ponto</h4>${explainRows(P.lv)}`;
+     <div class="exrow">${P.lv.tip}<br>`+
+     (fresa
+      ? `<em>X, Y</em> = posição da fresa no plano da peça, a partir do canto de referência.<br>
+         Canto cortado <b>C x45°</b>: anda <b>C</b> mm em X e <b>C</b> mm em Y ao mesmo tempo.<br>
+         Raio de canto <b>R</b>: desloca <b>R</b> mm em X e <b>R</b> mm em Y (é curva, não corte reto).<br>
+         <b>Fechamento:</b> a soma dos ΔX tem que dar o último X absoluto, e a soma dos ΔY o último Y.</div>`
+      : `<em>X</em> = diâmetro lido no desenho. <em>Z</em> = distância até a face (esquerda = negativo).<br>
+         Chanfro <b>C x45°</b>: o diâmetro de entrada é <b>ø − 2C</b> e o Z avança <b>C</b>.<br>
+         Raio <b>R</b>: consome <b>R</b> no raio (<b>2R</b> no diâmetro) e <b>R</b> em Z.<br>
+         <b>Fechamento:</b> a soma dos ΔX tem que dar o último X absoluto, e a soma dos ΔZ o último Z.</div>`)+
+    `<h4>Ponto a ponto</h4>${explainRows(P.lv)}`;
   openModal('#modalExplain');
 };
 $('#expClose').onclick=()=>closeModal('#modalExplain');
@@ -661,15 +748,15 @@ function win(){
     coins = P.assisted?0:8+6*st+Math.min(S.streak,6)*3;
     xp    = P.assisted?0:15+15*st;
   }else{
-    const prev=S.stars[lv.id]||0;
+    const prev=S.stars[skey(lv)]||0;
     first = prev===0;
-    if(st>prev) S.stars[lv.id]=st;
+    if(st>prev) S.stars[skey(lv)]=st;
     if(!first || P.assisted){ coins=Math.round(coins*.3); xp=Math.round(xp*.3); }
-    if(clean && (!S.best[lv.id] || secs<S.best[lv.id])){ recorde=!!S.best[lv.id]; S.best[lv.id]=secs; }
+    if(clean && (!S.best[skey(lv)] || secs<S.best[skey(lv)])){ recorde=!!S.best[skey(lv)]; S.best[skey(lv)]=secs; }
   }
   S.coins+=coins; S.xp+=xp; S.hints+=first?2:0;
   const newly=[];
-  UNLOCKS.forEach(u=>{ if(!S.unlocked.includes(u.id) && (S.stars[u.lvl]||0)>0){
+  UNLOCKS.forEach(u=>{ if(!S.unlocked.includes(u.id) && (S.stars['torno_'+u.lvl]||0)>0){
     if(u.id.startsWith('th_') && S.owned.includes(u.id)){
       const th=THEMES.find(t=>'th_'+t.t===u.id);
       if(th){ S.coins+=th.price; toast(`${th.name} veio de graça na fase ${u.lvl} — ${th.price} 🪙 devolvidos.`,4200); }
@@ -696,10 +783,10 @@ function win(){
     (!first&&!lv.endless?'<span class="rw dim">30% (repetição)</span>':'');
   const rk=rankOf(S.xp), nxr=nextRank(S.xp);
   const pctR = nxr ? Math.round((S.xp-rk[0])/(nxr[0]-rk[0])*100) : 100;
-  const bst = S.best[lv.id];
+  const bst = S.best[skey(lv)];
   const bossLv = LEVELS.find(l=>l.boss && !isUnlocked(l));
   const proxU  = UNLOCKS.find(u=>!has(u.id));
-  const faltamEstrelas = bossLv ? Math.max(0,BOSS_STARS-totalStars()) : 0;
+  const faltamEstrelas = bossLv ? Math.max(0,BOSS_STARS-starsForMachine(lv.machine||S.machine)) : 0;
   const meta = bossLv ? (faltamEstrelas>0
                ? `Faltam <b>${faltamEstrelas} ★</b> para liberar o CHEFE (fase ${bossLv.id}).`
                : `Estrelas suficientes — falta completar as fases até a ${bossLv.id-1} para liberar o CHEFE.`)
@@ -724,21 +811,21 @@ function win(){
     else nextLevel();
   };
   $('#resRepeat').textContent = lv.endless?'Outra peça':'Repetir';
-  $('#resRepeat').onclick=()=>{ closeModal('#modalResult'); startLevel(lv.endless?makeEndlessLevel(S.endlessRun+1):lv); };
+  $('#resRepeat').onclick=()=>{ closeModal('#modalResult'); startLevel(lv.endless?makeEndless(S.endlessRun+1):lv); };
 }
 function nextLevel(){
   const lv=P.lv;
-  if(lv.endless){ startLevel(makeEndlessLevel(S.endlessRun+1)); return; }
+  if(lv.endless){ startLevel(makeEndless(S.endlessRun+1)); return; }
   const i=LEVELS.indexOf(lv), nx=LEVELS[i+1];
   if(nx && isUnlocked(nx)) startLevel(nx);
-  else if(nx){ show('map'); toast(`O CHEFE exige ${BOSS_STARS} ★. Você tem ${totalStars()} — refaça fases para pegar 3 ★.`,4500); }
+  else if(nx){ show('map'); toast(`O CHEFE exige ${BOSS_STARS} ★. Você tem ${starsForMachine(S.machine)} — refaça fases para pegar 3 ★.`,4500); }
   else showFinish();
 }
 function showFinish(){
-  const perfeitas=LEVELS.filter(l=>(S.stars[l.id]||0)===3);
-  const faltam=LEVELS.filter(l=>(S.stars[l.id]||0)<3);
-  const tot=totalStars(), pct=Math.round(tot/MAX_STARS*100);
-  const soma=LEVELS.reduce((a,l)=>a+(S.best[l.id]||0),0);
+  const perfeitas=LEVELS.filter(l=>(S.stars[skey(l)]||0)===3);
+  const faltam=LEVELS.filter(l=>(S.stars[skey(l)]||0)<3);
+  const tot=starsForMachine(S.machine), pct=Math.round(tot/MAX_STARS*100);
+  const soma=LEVELS.reduce((a,l)=>a+(S.best[skey(l)]||0),0);
   $('#modalUnlock').classList.add('finish');
   $('#unTitle').textContent='Fim da trilha';
   $('#unBody').innerHTML=`
@@ -838,7 +925,8 @@ function renderShop(){
 
 /* ---------------- manual ---------------- */
 function renderHelp(){
-  $('#helpGrid').innerHTML = `
+  const fresa=S.machine==='fresa';
+  const htmlTorno = `
   <div class="card"><h3>Os eixos do torno</h3><ul>
     <li><code>Z</code> = comprimento, paralelo ao eixo da peça.</li>
     <li><code>Z+</code> afasta da placa (direita); <code>Z−</code> entra na peça.</li>
@@ -863,19 +951,49 @@ function renderHelp(){
     <li><b>D</b> degrau reto, sobe o diâmetro → <code>X40 Z-20</code></li>
     <li><b>E</b> fim da peça → <code>X40 Z-40</code></li></ul>
     <p><b>Fechamento:</b> ΣΔX = 40 (último X) e ΣΔZ = −40 (último Z). Se não fecha, o erro está entre duas linhas.</p></div>
-  <div class="card"><h3>Funções básicas</h3><ul>
-    <li><code>G0</code> rápido, sem cortar. <code>G1</code> avanço de trabalho.</li>
-    <li><code>G2/G3</code> arco horário/anti-horário, raio em <code>R</code>.</li>
-    <li><code>G90/G91</code> absoluto/incremental · <code>G54</code> zero-peça.</li>
-    <li><code>G96 S</code> velocidade de corte constante · <code>G97</code> RPM fixo.</li>
-    <li><code>T0101</code> ferramenta · <code>M3/M4</code> giro · <code>M30</code> fim.</li></ul></div>
   <div class="card"><h3>Erros clássicos</h3><ul>
     <li>Escrever o raio no lugar do diâmetro em X.</li>
     <li>Esquecer o sinal negativo em Z.</li>
     <li>No degrau reto mudar os dois eixos (só um muda).</li>
     <li>Começar o chanfro no diâmetro cheio.</li>
     <li>Escrever o incremental na coluna absoluta (ou o contrário).</li>
-    <li>Trocar as colunas X e Z.</li></ul></div>
+    <li>Trocar as colunas X e Z.</li></ul></div>`;
+  const htmlFresa = `
+  <div class="card"><h3>Os eixos da fresa</h3><ul>
+    <li><code>X, Y</code> = posição da fresa no plano da peça, vista de cima.</li>
+    <li>Zero-peça normalmente num <b>canto</b> do bloco (canto de referência).</li>
+    <li>Sem diâmetro: X e Y são só posição — podem ser negativos.</li>
+    <li>Ponto de aproximação (<b>PA</b>) fica fora da peça, longe do contorno.</li></ul></div>
+  <div class="card"><h3>Absoluta × Incremental</h3><ul>
+    <li><b>Absoluta (G90)</b>: tudo medido a partir do canto de referência.</li>
+    <li><b>Incremental (G91)</b>: quanto a fresa andou desde o ponto anterior.</li>
+    <li><code>ΔX = X − X anterior</code> · <code>ΔY = Y − Y anterior</code></li></ul></div>
+  <div class="card"><h3>Canto cortado e raio</h3><ul>
+    <li>Canto cortado <code>C x45°</code>: anda <code>C</code> mm em X e <code>C</code> mm em Y ao mesmo tempo.</li>
+    <li>Raio de canto <code>R</code>: desloca <code>R</code> mm em X e <code>R</code> mm em Y (é curva, não corte reto).</li>
+    <li>Trecho diagonal: X e Y mudam no mesmo bloco, em proporções livres.</li>
+    <li>Leitura rápida: só X muda → lado reto em X · só Y muda → lado reto em Y · os dois iguais → 45° · proporções diferentes → diagonal.</li></ul></div>
+  <div class="card"><h3>Exemplo resolvido</h3>
+    <p>Contorno com um degrau, canto de referência na quina inicial:</p><ul>
+    <li><b>A</b> canto de referência → <code>X0 Y0</code></li>
+    <li><b>B</b> andou em X → <code>X30 Y0</code></li>
+    <li><b>C</b> subiu em Y → <code>X30 Y20</code></li>
+    <li><b>D</b> degrau: sobe X sem mudar Y → <code>X50 Y20</code></li>
+    <li><b>E</b> fim do contorno → <code>X50 Y40</code></li></ul>
+    <p><b>Fechamento:</b> ΣΔX = 50 (último X) e ΣΔY = 40 (último Y). Se não fecha, o erro está entre duas linhas.</p></div>
+  <div class="card"><h3>Erros clássicos</h3><ul>
+    <li>Trocar as colunas X e Y.</li>
+    <li>Esquecer o sinal negativo (pontos do outro lado do canto de referência).</li>
+    <li>No degrau reto mudar os dois eixos (só um muda).</li>
+    <li>Contar o canto cortado só de um lado (X e Y mudam juntos).</li>
+    <li>Escrever o incremental na coluna absoluta (ou o contrário).</li></ul></div>`;
+  $('#helpGrid').innerHTML = (fresa?htmlFresa:htmlTorno) + `
+  <div class="card"><h3>Funções básicas</h3><ul>
+    <li><code>G0</code> rápido, sem cortar. <code>G1</code> avanço de trabalho.</li>
+    <li><code>G2/G3</code> arco horário/anti-horário, raio em <code>R</code>.</li>
+    <li><code>G90/G91</code> absoluto/incremental · <code>G54</code> zero-peça.</li>
+    <li><code>G96 S</code> velocidade de corte constante · <code>G97</code> RPM fixo.</li>
+    <li><code>T0101</code> ferramenta · <code>M3/M4</code> giro · <code>M30</code> fim.</li></ul></div>
   <div class="card"><h3>Ajuda e estrelas</h3><ul>
     <li>3 ★ = acertou de primeira, sem dica paga.</li>
     <li><b>Dica</b> nível 1 é sempre grátis (mostra onde olhar); aprofundar gasta 💡.</li>
@@ -893,7 +1011,7 @@ function renderHelp(){
       <button class="btn danger" id="btnReset">Zerar progresso</button>
     </div><input type="file" id="fileImport" accept="application/json" style="display:none"></div>`;
 
-  $('#helpTutor').onclick=()=>{ startLevel(LEVELS[0]); clearTimeout(startLevel._tut); startTutorial(); };
+  $('#helpTutor').onclick=()=>{ switchMachine('torno'); startLevel(LEVELS_TORNO[0]); clearTimeout(startLevel._tut); startTutorial(); };
   $('#btnExport').onclick=async ()=>{
     const json=JSON.stringify(S,null,1);
     try{
@@ -1017,7 +1135,9 @@ function _draw(){
   const C=themeColors();
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle=C.paper; ctx.fillRect(0,0,W,H);
-
+  if((P.lv.machine||S.machine)==='fresa') drawFresa(W,H,C); else drawTorno(W,H,C);
+}
+function drawTorno(W,H,C){
   const path=P.lv.pts.filter(p=>!p.safe);      // marcadores
   const pts =path.filter(p=>p.z<=0);           // sólido
   if(!pts.length) return;
@@ -1215,6 +1335,153 @@ function _draw(){
     ctx.fillStyle=C.muted; ctx.font='11px '+CVFONT; ctx.textAlign='right';
     const rotulo = safes.length>1 ? 'pontos de segurança' : 'ponto de segurança';
     const lista = safes.map(s=>`${s.id} (X${fmt(s.x)} Z${fmt(s.z)})`).join(', ');
+    ctx.fillText('⌖ '+lista+' = '+rotulo+' (fora do desenho)', W-14, H-8);
+  }
+}
+function drawFresa(W,H,C){
+  const path=P.lv.pts.filter(p=>!p.safe);
+  if(!path.length) return;
+  const xsAll=path.map(p=>p.x), ysAll=path.map(p=>p.z);
+  const xmin=Math.min(0,...xsAll), xmax=Math.max(0,...xsAll);
+  const ymin=Math.min(0,...ysAll), ymax=Math.max(0,...ysAll);
+  const xsPos=[...new Set(path.map(p=>p.x).filter(x=>x!==0))].sort((a,b)=>a-b);
+
+  const dstep=Math.max(22, Math.min(26, (H*0.44)/Math.max(1,xsPos.length)));
+  const botPad=view.dims? 18+xsPos.length*dstep : 30;
+  const padL=Math.min(70,W*0.16), padR=Math.min(40,W*0.10), topPad=Math.min(34,H*0.09);
+  const availW=Math.max(60, W-padL-padR), availH=Math.max(60, H-topPad-botPad);
+  const sc=Math.min(availW/((xmax-xmin)||1), availH/((ymax-ymin)||1))*0.94;
+  const sx=x=> padL+(x-xmin)*sc;
+  const sy=y=> topPad+availH-(y-ymin)*sc;      // Y cresce para cima na tela
+  const hlPt = P.hl>=0 ? P.lv.pts[P.hl] : null;
+  const mark = has('marker') && hlPt;
+
+  /* grade ancorada no zero */
+  if(view.grid){
+    ctx.strokeStyle=C.line; ctx.globalAlpha = document.body.dataset.theme==='paper' ? .16 : .35; ctx.lineWidth=1;
+    const vline=X=>{ if(X>=0&&X<=W){ctx.beginPath();ctx.moveTo(X,0);ctx.lineTo(X,H);ctx.stroke();} };
+    const hline=Y=>{ if(Y>=0&&Y<=H){ctx.beginPath();ctx.moveTo(0,Y);ctx.lineTo(W,Y);ctx.stroke();} };
+    for(let x=0; x<=xmax+5; x+=5) vline(sx(x));
+    for(let x=-5; x>=xmin-5; x-=5) vline(sx(x));
+    for(let y=0; y<=ymax+5; y+=5) hline(sy(y));
+    for(let y=-5; y>=ymin-5; y-=5) hline(sy(y));
+    ctx.globalAlpha=1;
+  }
+
+  /* bloco de material */
+  const m=16;
+  ctx.setLineDash([6,4]); ctx.strokeStyle=C.muted; ctx.globalAlpha=.6; ctx.lineWidth=1.2;
+  ctx.strokeRect(sx(xmin)-m, sy(ymax)-m, sx(xmax)-sx(xmin)+2*m, sy(ymin)-sy(ymax)+2*m);
+  ctx.setLineDash([]); ctx.globalAlpha=1;
+  ctx.fillStyle=C.muted; ctx.font='11px '+CVFONT; ctx.textAlign='left';
+  ctx.fillText('bloco', sx(xmin)-m, sy(ymax)-m-6);
+
+  /* contorno */
+  ctx.lineWidth=2.4; ctx.strokeStyle=C.draw; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(sx(path[0].x), sy(path[0].z));
+  path.forEach(p=>ctx.lineTo(sx(p.x), sy(p.z)));
+  ctx.stroke();
+
+  /* origem — canto de referência da peça */
+  const ox=sx(0), oy=sy(0);
+  ctx.strokeStyle=C.acc; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.arc(ox,oy,7,0,7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ox-11,oy);ctx.lineTo(ox+11,oy);ctx.moveTo(ox,oy-11);ctx.lineTo(ox,oy+11);ctx.stroke();
+  ctx.fillStyle=C.acc; ctx.font='bold 11px '+CVFONT; ctx.textAlign='left';
+  ctx.fillText('0', ox+13, oy+16);
+
+  if(view.axis){
+    const ax=W-58, ay=Math.min(50,topPad+8);
+    ctx.strokeStyle=C.acc2; ctx.lineWidth=1.6; ctx.fillStyle=C.acc2; ctx.font='bold 11px '+CVFONT;
+    arrow(ctx,ax,ay,ax,ay-26); ctx.textAlign='center'; ctx.fillText('Y+',ax,ay-32);
+    arrow(ctx,ax,ay,ax+26,ay); ctx.textAlign='left'; ctx.fillText('X+',ax+30,ay+4);
+  }
+
+  if(view.dims){
+    ctx.font='12px '+CVFONT; ctx.lineWidth=1.2;
+    /* cantos cortados / raio */
+    ctx.fillStyle=C.dim; ctx.strokeStyle=C.dim; ctx.textAlign='left';
+    for(let i=1;i<path.length;i++){
+      const a=path[i-1], b=path[i];
+      const dx=Math.abs(b.x-a.x), dy=Math.abs(b.z-a.z);
+      if(dx>0 && dy>0 && Math.abs(dx-dy)<TOL && dx<=6){
+        const mx=(sx(a.x)+sx(b.x))/2, my=(sy(a.z)+sy(b.z))/2;
+        ctx.fillText(b.arc?('R'+fmt(b.arc)):(fmt(dx)+'x45°'), mx+9, my-6);
+      }
+    }
+    /* cotas de X empilhadas embaixo do bloco */
+    const yBase=topPad+availH;
+    xsPos.forEach((x,i)=>{
+      const on = mark && hlPt.x===x;
+      ctx.strokeStyle=on?C.acc:C.dim; ctx.fillStyle=on?C.acc:C.dim; ctx.lineWidth=on?2:1;
+      const Y=yBase+16+i*dstep, X=sx(x), X0=sx(0);
+      ctx.globalAlpha=.35;
+      ctx.beginPath(); ctx.moveTo(X,yBase+3); ctx.lineTo(X,Y+4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X0,yBase+3); ctx.lineTo(X0,Y+4); ctx.stroke();
+      ctx.globalAlpha=1;
+      arrow(ctx,X0,Y,X,Y); arrow(ctx,X,Y,X0,Y);
+      ctx.textAlign='center';
+      const txt=fmt(x), tw=ctx.measureText(txt).width, mxx=(X+X0)/2;
+      ctx.save(); ctx.fillStyle=C.paper; ctx.fillRect(mxx-tw/2-3, Y-14, tw+6, 13); ctx.restore();
+      ctx.fillText(txt, mxx, Y-4);
+      ctx.lineWidth=1;
+    });
+  }
+
+  /* perfil-fantasma do jogador */
+  if(view.ghost){
+    const g=playerPts(P.lv).filter(p=>p.ok&&!p.safe);
+    if(g.length>1){
+      ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
+      ctx.setLineDash([10,6]); ctx.strokeStyle=C.acc;
+      ctx.beginPath();
+      g.forEach((p,i)=> i?ctx.lineTo(sx(p.x),sy(p.z)):ctx.moveTo(sx(p.x),sy(p.z)));
+      ctx.lineWidth=7; ctx.globalAlpha=.12; ctx.stroke();
+      ctx.lineWidth=2.6; ctx.globalAlpha=.9;  ctx.stroke();
+      ctx.setLineDash([]);
+      g.forEach(p=>{ ctx.beginPath(); ctx.arc(sx(p.x),sy(p.z),4.5,0,7);
+        ctx.fillStyle=p.hit?C.ok:C.err; ctx.fill(); });
+      ctx.restore(); ctx.globalAlpha=1;
+    }
+  }
+
+  /* pontos + rótulos */
+  const boxes=[];
+  path.forEach(p=>{
+    const X=sx(p.x), Y=sy(p.z);
+    HIT.push({r:P.lv.pts.indexOf(p), x:X, y:Y});
+    const on = hlPt===p;
+    if(on){
+      ctx.strokeStyle=C.acc2; ctx.setLineDash([4,4]); ctx.lineWidth=1.2; ctx.globalAlpha=.9;
+      ctx.beginPath(); ctx.moveTo(X,Y); ctx.lineTo(X,sy(0)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X,Y); ctx.lineTo(sx(0),Y); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
+      ctx.beginPath(); ctx.arc(X,Y,11,0,7); ctx.strokeStyle=C.acc2; ctx.lineWidth=2; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(X,Y,on?6:4.5,0,7);
+    ctx.fillStyle= on?C.acc2:C.pt; ctx.fill();
+
+    ctx.font='bold 13px '+CVFONT; ctx.textAlign='center';
+    const w=ctx.measureText(p.id).width+8;
+    let lx=X, ly=Y-13, t=0;
+    while(boxes.some(b=>Math.abs(b.x-lx)<(b.w+w)/2 && Math.abs(b.y-ly)<15) && t<8){
+      ly-=15; if(t%2===1) lx += (w/2+4)*(t%4===1?1:-1); t++;
+    }
+    ly=Math.max(14,ly); lx=Math.min(W-w/2-4, Math.max(w/2+4, lx));
+    boxes.push({x:lx,y:ly,w});
+    if(ly<Y-16){ ctx.strokeStyle=on?C.acc2:C.muted; ctx.globalAlpha=.35; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(X,Y-6); ctx.lineTo(lx,ly+4); ctx.stroke(); ctx.globalAlpha=1; }
+    ctx.fillStyle=C.paper; ctx.fillRect(lx-w/2,ly-11,w,15);
+    ctx.fillStyle= on?C.acc2:C.draw;
+    ctx.fillText(p.id, lx, ly);
+  });
+
+  const safes=P.lv.pts.filter(p=>p.safe);
+  if(safes.length){
+    ctx.fillStyle=C.muted; ctx.font='11px '+CVFONT; ctx.textAlign='right';
+    const rotulo = safes.length>1 ? 'pontos de aproximação' : 'ponto de aproximação';
+    const lista = safes.map(s=>`${s.id} (X${fmt(s.x)} Y${fmt(s.z)})`).join(', ');
     ctx.fillText('⌖ '+lista+' = '+rotulo+' (fora do desenho)', W-14, H-8);
   }
 }

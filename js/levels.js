@@ -13,8 +13,14 @@ const MODE_LABEL = {
   both: 'Absolutas + Incrementais',
   gcode:'Programação G0 / G1'
 };
+const MODE_LABEL_FRESA = {
+  abs:  'Coordenadas absolutas (X, Y)',
+  inc:  'Coordenadas incrementais (ΔX, ΔY)',
+  both: 'Absolutas + Incrementais',
+  gcode:'Programação G0 / G1'
+};
 
-const LEVELS = [
+const LEVELS_TORNO = [
 {
   id:1, name:'Primeiro Contato', sub:'Eixo Z e o diâmetro X', modes:['abs'], boss:false,
   tip:'X é sempre DIÂMETRO. Z anda para a esquerda = negativo.',
@@ -370,7 +376,7 @@ function makeEndlessLevel(seedRun){
 
   const nivel = ['aquecimento','com cone','com raio','longa','completa'][tier];
   return {
-    id:'inf', name:'Modo Infinito #'+run, sub:MODE_LABEL[modes[0]], modes, endless:true, boss:false,
+    id:'inf', name:'Modo Infinito #'+run, sub:MODE_LABEL[modes[0]], modes, endless:true, boss:false, machine:'torno',
     tip: isG ? 'G0 = no ar (aproximação e recuo). G1 = cortando. X continua sendo diâmetro.'
              : 'Peça gerada na hora. Mesma leitura de sempre: X diâmetro, Z negativo para dentro.',
     brief:`Desafio aleatório (${nivel}) — ${pts.length} linhas nesta rodada.`,
@@ -382,6 +388,383 @@ function makeEndlessLevel(seedRun){
       useSafe ? 'O ponto de segurança não aparece no desenho: X grande e Z POSITIVO.'
               : (modes[0]==='inc'||modes[0]==='both') ? 'Confira a soma dos incrementais com o último valor absoluto.'
               : 'X é diâmetro, Z negativo para dentro — sem coluna extra aqui.'
+    ]
+  };
+}
+
+/* =========================================================================
+   CNC COORDENADAS — dados das fases (FRESA)
+   Convenção (vista de topo / plano XY):
+     X, Y = posição da fresa no plano da peça (sem diâmetro — é fresamento, não torno)
+     Zero-peça = canto de referência da peça (normalmente um canto do bloco)
+     Ponto de aproximação (PA) fica FORA da peça, geralmente com X e/ou Y negativos
+   Cada ponto: {id, x, z, note?, g?, safe?, arc?} — reaproveita as mesmas chaves do
+   torno (x/z), só que aqui x=X e z=Y (rotulados como X/Y na tela pelo game.js).
+   ========================================================================= */
+const LEVELS_FRESA = [
+{
+  id:1, name:'Primeiro Contato', sub:'Os eixos X e Y da fresa', modes:['abs'], boss:false,
+  tip:'Aqui não existe diâmetro: X e Y são só a posição da fresa no plano da peça.',
+  brief:'Vista de cima de uma peça simples, com um degrau. Leia X e Y de cada canto.',
+  pts:[
+    {id:'A', x:0,  z:0,  note:'quina inicial — canto de referência da peça'},
+    {id:'B', x:30, z:0,  note:'andou em X, o Y não mudou'},
+    {id:'C', x:30, z:20, note:'subiu em Y, o X não mudou'},
+    {id:'D', x:50, z:20, note:'degrau: X avança, Y fica igual'},
+    {id:'E', x:50, z:40, note:'fim do contorno'}
+  ],
+  hints:[
+    'De A para B só X muda — a fresa anda reto num lado do contorno.',
+    'De B para C só Y muda — é o lado perpendicular.',
+    'Em cada canto reto, um dos dois eixos repete o valor do ponto anterior.'
+  ]
+},
+{
+  id:2, name:'Canto Cortado', sub:'Corte 4x45° e trecho diagonal', modes:['abs'], boss:false,
+  tip:'Corte de canto 4x45°: anda 4 mm em X e 4 mm em Y ao mesmo tempo.',
+  brief:'Mesmo tipo de contorno, agora com um canto cortado a 45° e um trecho diagonal.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:20, z:0},
+    {id:'C', x:24, z:4,  note:'corte de canto 4x45°: 4 mm em X e 4 mm em Y'},
+    {id:'D', x:24, z:24},
+    {id:'E', x:44, z:44, note:'trecho diagonal — X e Y mudam juntos'},
+    {id:'F', x:44, z:60}
+  ],
+  hints:[
+    'B→C é o corte de canto: ΔX = 4 e ΔY = 4, os dois iguais (45°).',
+    'D→E é diagonal: X e Y mudam na mesma proporção, 20 e 20.',
+    'Comprimento total 60 mm em Y → o último ponto é Y60.'
+  ]
+},
+{
+  id:3, name:'Pensando em Δ', sub:'Coordenadas incrementais em X/Y', modes:['inc'], boss:false,
+  tip:'Incremental = quanto a fresa ANDOU desde o ponto anterior, em X e em Y.',
+  brief:'A mesma leitura de sempre, mas agora você informa o deslocamento desde o ponto anterior.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:35, z:0},
+    {id:'C', x:35, z:15},
+    {id:'D', x:55, z:15},
+    {id:'E', x:55, z:35}
+  ],
+  hints:[
+    'O primeiro ponto sai da origem: o incremental é igual ao absoluto.',
+    'Se X não muda, ΔX = 0. Se Y não muda, ΔY = 0.',
+    'Andar para cima em Y dá ΔY positivo; andar em X dá ΔX positivo.'
+  ]
+},
+{
+  id:4, name:'Δ com Canto', sub:'Incremental em contorno com canto cortado', modes:['inc'], boss:false,
+  tip:'No canto cortado 4x45°, ΔX vale 4 e ΔY vale 4.',
+  brief:'Contorno com canto cortado e degrau — só incrementais.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:26, z:0},
+    {id:'C', x:30, z:4},
+    {id:'D', x:30, z:24},
+    {id:'E', x:50, z:24},
+    {id:'F', x:50, z:48}
+  ],
+  hints:[
+    'B→C é o canto cortado: ΔX = 4 e ΔY = 4.',
+    'D→E é degrau reto: ΔY = 0.',
+    'Some todos os ΔY: o resultado tem que dar 48 (altura total).'
+  ]
+},
+{
+  id:5, name:'Lado a Lado', sub:'A mesma peça nas duas colunas', modes:['both'], boss:false,
+  tip:'X e Y são só posição no plano — as mesmas regras de sempre, agora nas quatro colunas.',
+  brief:'A peça da fase 3 de novo — agora com as quatro colunas. Sem canto cortado: só o método.',
+  pts:[
+    {id:'A', x:0,  z:0,  note:'canto de referência'},
+    {id:'B', x:35, z:0,  note:'andou em X, ainda em Y0'},
+    {id:'C', x:35, z:15, note:'fim do trecho de 15 mm'},
+    {id:'D', x:55, z:15, note:'degrau: sobe X sem mudar Y'},
+    {id:'E', x:55, z:35, note:'fim do contorno'}
+  ],
+  hints:[
+    'Absoluta = medida a partir do canto de referência. Incremental = diferença para a linha de cima.',
+    'A primeira linha sai da origem, então ΔX = X e ΔY = Y: 35 e 0.',
+    'Controle: ΣΔX = 35+0+20+0 = 55 (último X) e ΣΔY = 0+15+0+20 = 35 (último Y).'
+  ]
+},
+{
+  id:6, name:'Duas Colunas', sub:'Absoluta e incremental juntas', modes:['both'], boss:false,
+  tip:'Confira cada ponto com o desenho: qual X e qual Y ele mostra ali?',
+  brief:'Agora as duas tabelas ao mesmo tempo, como na folha de processo.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:18, z:0},
+    {id:'C', x:22, z:4},
+    {id:'D', x:22, z:18},
+    {id:'E', x:36, z:32},
+    {id:'F', x:36, z:46},
+    {id:'G', x:56, z:46}
+  ],
+  hints:[
+    'Absoluta = medida a partir do canto de referência. Incremental = diferença da linha de cima.',
+    'D→E é diagonal: muda X e Y ao mesmo tempo.',
+    'A última linha é degrau: ΔY = 0, ΔX = 56 − 36 = 20.'
+  ]
+},
+{
+  id:7, name:'Raio de Canto', sub:'Corte, raio R3 e degrau', modes:['abs'], boss:false,
+  tip:'Num raio R3 o ponto final fica deslocado 3 mm em X e 3 mm em Y — é curva, não corte reto.',
+  brief:'Contorno com canto cortado, trecho reto, raio e degrau. Atenção nos pontos do raio.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:14, z:0,  note:'entrada do canto cortado 3x45°'},
+    {id:'C', x:17, z:3,  note:'fim do canto cortado'},
+    {id:'D', x:17, z:20, note:'fim do lado reto'},
+    {id:'E', x:23, z:20, note:'início do raio R3'},
+    {id:'F', x:26, z:23, arc:3, note:'fim do raio, já em X26'},
+    {id:'G', x:26, z:42},
+    {id:'H', x:46, z:42}
+  ],
+  hints:[
+    'Canto cortado 3x45° → anda 3 mm em X e 3 mm em Y.',
+    'O raio R3 desloca 3 mm em X e 3 mm em Y — é uma curva, não um corte reto.',
+    'E→F: X vai de 23 para 26 enquanto Y vai de 20 para 23.'
+  ]
+},
+{
+  id:8, name:'Folha de Processo', sub:'Absoluta + incremental, 8 pontos', modes:['both'], boss:false,
+  tip:'Confira somando: a soma dos ΔX tem que bater com o último X absoluto.',
+  brief:'Contorno longo. Preencha as quatro colunas sem errar o sinal.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:24, z:0},
+    {id:'C', x:27, z:3},
+    {id:'D', x:27, z:25},
+    {id:'E', x:41, z:25},
+    {id:'F', x:41, z:48},
+    {id:'G', x:57, z:56},
+    {id:'H', x:57, z:75}
+  ],
+  hints:[
+    'Canto cortado 3x45° na entrada: 27 = 24 + 3.',
+    'F→G é diagonal: ΔX = 16 e ΔY = 8.',
+    'Soma dos ΔY = 75. Soma dos ΔX = 57.'
+  ]
+},
+{
+  id:9, name:'Antes de Aproximar', sub:'Ponto de aproximação e leitura de sinal', modes:['abs'], boss:false,
+  tip:'O ponto de aproximação (PA) fica FORA da peça — X e Y bem afastados, geralmente negativos.',
+  brief:'Contorno simples. O que é novo aqui são as duas primeiras linhas: o ponto de aproximação e a entrada na peça.',
+  pts:[
+    {id:'P1', x:-40, z:-40, safe:true, note:'ponto de aproximação — fora da peça, não está no desenho'},
+    {id:'P2', x:0,   z:0,   note:'entrou no canto de referência da peça'},
+    {id:'P3', x:24,  z:0},
+    {id:'P4', x:24,  z:20},
+    {id:'P5', x:40,  z:20},
+    {id:'P6', x:40,  z:35}
+  ],
+  hints:[
+    'P1 é o ponto de aproximação: bem longe da peça, X e Y negativos → X-40 Y-40.',
+    'P2 já é o canto de referência da peça: X0 Y0.',
+    'De P3 a P6 é o contorno de sempre: sobe em X, depois em Y, degrau, e mais um trecho.'
+  ]
+},
+{
+  id:10, name:'A Peça do Instrutor', sub:'9 pontos + ponto de aproximação', modes:['abs'], boss:false,
+  tip:'O ponto de aproximação fica bem longe do contorno: X e Y bem negativos.',
+  brief:'Aquela peça de prova: contorno escalonado com cantos cortados e um raio. P1 é o ponto de aproximação.',
+  pts:[
+    {id:'P1', x:-50, z:-50, safe:true, note:'ponto de aproximação'},
+    {id:'P2', x:0,   z:0,   note:'canto de referência da peça'},
+    {id:'P3', x:14,  z:0},
+    {id:'P4', x:17,  z:3,  note:'fim do canto cortado 3x45°'},
+    {id:'P5', x:17,  z:20},
+    {id:'P6', x:23,  z:20, note:'início do raio R3'},
+    {id:'P7', x:26,  z:23, arc:3, note:'fim do raio R3'},
+    {id:'P8', x:26,  z:40},
+    {id:'P9', x:40,  z:40, note:'início do canto cortado do degrau final'},
+    {id:'P10',x:46,  z:46, note:'fim do canto cortado, 6 mm em X e Y'}
+  ],
+  hints:[
+    'P1 não toca a peça: está bem longe, em X-50 Y-50.',
+    'P2 é o canto de referência: X0 Y0.',
+    'No canto entre P9 e P10, X e Y andam juntos 6 mm — outro corte a 45°.'
+  ]
+},
+{
+  id:11, name:'Cinco Blocos', sub:'Primeiro programa: G0 e G1', modes:['gcode'], boss:false,
+  tip:'G0 = no ar, sem cortar. G1 = cortando. Só a aproximação é G0 aqui.',
+  brief:'A peça da fase 1, agora escrita como programa. Cinco blocos, um G0 e quatro G1.',
+  pts:[
+    {id:'N10', x:30, z:-8, g:'G0', note:'aproxima no ar, 8 mm antes de tocar o contorno'},
+    {id:'N20', x:30, z:0,  g:'G1', note:'toca o contorno — a partir daqui há material'},
+    {id:'N30', x:30, z:20, g:'G1'},
+    {id:'N40', x:50, z:20, g:'G1', note:'degrau: sobe em X sem mudar Y'},
+    {id:'N50', x:50, z:40, g:'G1', note:'termina os 40 mm de Y'}
+  ],
+  hints:[
+    'Só o primeiro bloco é no ar: N10 é G0, todo o resto é G1.',
+    'N10 está 8 mm ANTES do contorno (Y-8) e N20 já toca nele (Y0) — o X não muda, continua 30.',
+    'N30→N40 é degrau: Y fica em 20 e X vai de 30 para 50.'
+  ]
+},
+{
+  id:12, name:'Escrevendo G-Code', sub:'G0 rápido, G1 usinando', modes:['gcode'], boss:false,
+  tip:'G0 = deslocamento rápido, no ar, sem F. G1 = avanço de trabalho, cortando, com F.',
+  brief:'Agora vira programa: escolha G0/G1 e preencha X e Y de cada bloco.',
+  pts:[
+    {id:'N10', x:0,  z:-8, g:'G0', note:'aproxima no ar, 8 mm antes do canto de referência'},
+    {id:'N20', x:0,  z:0,  g:'G1', note:'entra no canto de referência'},
+    {id:'N30', x:22, z:0,  g:'G1'},
+    {id:'N40', x:22, z:26, g:'G1'},
+    {id:'N50', x:42, z:26, g:'G1'},
+    {id:'N60', x:42, z:48, g:'G1'},
+    {id:'N70', x:-60,z:-60,g:'G0', safe:true, note:'recua para longe da peça'}
+  ],
+  hints:[
+    'Movimento no ar (aproximação e recuo) sempre G0; qualquer corte é G1.',
+    'A aproximação em Y-8 fica ANTES do contorno.',
+    'O último bloco leva a fresa para longe: G0 X-60 Y-60.'
+  ]
+},
+{
+  id:13, name:'Perfil com Dois Cantos', sub:'Absoluta + incremental com duas diagonais', modes:['both'], boss:false,
+  tip:'Num trecho diagonal, X e Y mudam na mesma linha. Calcule um de cada vez.',
+  brief:'Duas diagonais e um degrau. Cada diagonal muda X e Y na mesma linha.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:16, z:0},
+    {id:'C', x:20, z:4},
+    {id:'D', x:20, z:15},
+    {id:'E', x:34, z:30},
+    {id:'F', x:34, z:45},
+    {id:'G', x:48, z:52},
+    {id:'H', x:48, z:70},
+    {id:'I', x:64, z:70}
+  ],
+  hints:[
+    'D→E é diagonal: ΔX = 14 e ΔY = 15.',
+    'F→G é a segunda diagonal: ΔX = 14 e ΔY = 7.',
+    'A última linha é degrau reto: ΔY = 0.'
+  ]
+},
+{
+  id:14, name:'Programa Completo', sub:'G-code com canto cortado e diagonal', modes:['gcode'], boss:false,
+  tip:'Aproxime sempre no ar (G0) até perto da peça e só depois use G1.',
+  brief:'Programa de acabamento inteiro, do ponto de aproximação até o recuo.',
+  pts:[
+    {id:'N10', x:-60,z:-60,g:'G0', safe:true, note:'ponto de aproximação'},
+    {id:'N20', x:14, z:-8, g:'G0', note:'aproximação rápida, perto do contorno'},
+    {id:'N30', x:14, z:0,  g:'G1'},
+    {id:'N40', x:17, z:3,  g:'G1', note:'canto cortado 3x45°'},
+    {id:'N50', x:17, z:24, g:'G1'},
+    {id:'N60', x:29, z:24, g:'G1'},
+    {id:'N70', x:29, z:48, g:'G1'},
+    {id:'N80', x:47, z:57, g:'G1', note:'diagonal'},
+    {id:'N90', x:47, z:72, g:'G1'},
+    {id:'N100',x:-60,z:-60,g:'G0', safe:true, note:'recuo'}
+  ],
+  hints:[
+    'Blocos N10, N20 e N100 são no ar → G0. Todo o resto é G1.',
+    'O canto cortado 3x45° soma 3 mm em X e 3 mm em Y.',
+    'N70→N80 é diagonal: X vai a 47 enquanto Y vai a 57.'
+  ]
+},
+{
+  id:15, name:'Peça de Prova', sub:'CHEFE — tudo junto', modes:['both'], boss:true,
+  tip:'Sem pressa: absoluta primeiro, incremental depois, confira as somas.',
+  brief:'11 pontos, canto cortado, raio, duas diagonais e degraus. Prove que virou programador de fresa.',
+  pts:[
+    {id:'A', x:0,  z:0},
+    {id:'B', x:12, z:0},
+    {id:'C', x:15, z:3},
+    {id:'D', x:15, z:16},
+    {id:'E', x:23, z:16},
+    {id:'F', x:26, z:19, arc:3},
+    {id:'G', x:26, z:38},
+    {id:'H', x:40, z:48},
+    {id:'I', x:40, z:62},
+    {id:'J', x:52, z:68},
+    {id:'K', x:52, z:88}
+  ],
+  hints:[
+    'Canto cortado 3x45° na entrada: 15 = 12 + 3.',
+    'E→F é raio R3: 3 mm em X e 3 mm em Y (curva, não corte reto).',
+    'Somas de controle: ΣΔX = 52 e ΣΔY = 88.'
+  ]
+}
+];
+
+/* ---- gerador do Modo Infinito (fresa) — mesma lógica do torno, plano XY ---- */
+function makeEndlessLevelFresa(seedRun){
+  const R=(a,b,st=1)=> a + st*Math.floor(Math.random()*((b-a)/st+1));
+  const run  = Math.max(1, seedRun|0);
+  const tier = Math.min(4, Math.floor((run-1)/4));
+  const ALPHA='ABCDEFGHIJKLMN';
+
+  const nGeo = Math.min(12, 5 + Math.floor(run/2) + tier);
+  const ch = R(2,3);
+  let x = R(12,26,2), z = 0;
+  const geo=[{x:0, z:0, note:'canto de referência'}];
+  geo.push({x:x-ch, z:0,  note:`entrada do canto cortado ${ch}x45° (${x} − ${ch})`});
+  geo.push({x:x,    z:ch, note:'fim do canto cortado'});
+  z = ch;
+  let lastWasStep = true;
+  while(geo.length < nGeo){
+    const left = nGeo - geo.length;
+    if(lastWasStep || left===1){ z += R(10,26,1); geo.push({x, z}); lastWasStep=false; continue; }
+    let grow = R(8,16,2);
+    if(x+grow > 80) grow = 80-x;
+    if(grow < 8){ z += R(10,20); geo.push({x, z}); lastWasStep=false; continue; }
+    const roll = Math.random();
+    if(tier>=2 && left>=2 && roll<.30){                // raio de canto (rodada 9+)
+      const r = R(2,3);
+      geo.push({x:x+grow-r, z, note:`início do raio R${r}`});
+      x += grow; z += r;
+      geo.push({x, z, arc:r, note:`fim do raio R${r}`});
+    } else if(tier>=1 && roll<.60){                    // diagonal (rodada 5+)
+      x += grow; z += R(4,10);
+      geo.push({x, z, note:'diagonal'});
+    } else {                                           // degrau reto
+      x += grow; geo.push({x, z});
+    }
+    lastWasStep = true;
+  }
+  if(lastWasStep && geo.length<nGeo){ z += R(10,20); geo.push({x, z, note:'fim do contorno'}); }
+
+  const POOL = run<6 ? ['abs','inc','both','abs','inc','both']
+                     : ['both','gcode','abs','both','inc','gcode'];
+  const modes = [ POOL[run % POOL.length] ];
+  const isG   = modes[0]==='gcode';
+  const useSafe = isG || (run>=8 && modes[0]!=='inc');
+
+  const pts=[];
+  if(isG){
+    let n=0;
+    const blk = o => pts.push(Object.assign({id:'N'+(10*++n)}, o));
+    if(useSafe) blk({x:-60, z:-60, g:'G0', safe:true, note:'ponto de aproximação'});
+    blk({x:geo[1].x, z:-8, g:'G0', note:'aproximação rápida, perto do contorno'});
+    geo.forEach(p => blk(Object.assign({}, p, {g:'G1'})));
+    if(useSafe) blk({x:-60, z:-60, g:'G0', safe:true, note:'recuo'});
+  } else if(useSafe){
+    let n=1;
+    pts.push({id:'P1', x:-50, z:-50, safe:true, note:'ponto de aproximação'});
+    geo.forEach((p,i) => pts.push(Object.assign({}, p, {id:'P'+(++n)})));
+  } else {
+    geo.forEach((p,i) => pts.push(Object.assign({}, p, {id:ALPHA[i]})));
+  }
+
+  const nivel = ['aquecimento','com diagonal','com raio','longa','completa'][tier];
+  return {
+    id:'inf', name:'Modo Infinito #'+run, sub:MODE_LABEL_FRESA[modes[0]], modes, endless:true, boss:false, machine:'fresa',
+    tip: isG ? 'G0 = no ar (aproximação e recuo). G1 = cortando.'
+             : 'Contorno gerado na hora. Mesma leitura de sempre: X e Y no plano, sem diâmetro.',
+    brief:`Desafio aleatório (${nivel}) — ${pts.length} linhas nesta rodada.`,
+    pts,
+    hints:[
+      'X e Y são só posição no plano — sem diâmetro.',
+      isG ? 'Aproximação e recuo não cortam nada → G0. Todo bloco que toca material → G1.'
+          : 'Degrau reto: um dos dois eixos não muda entre as linhas.',
+      useSafe ? 'O ponto de aproximação não aparece no desenho: bem longe do contorno, geralmente negativo.'
+              : (modes[0]==='inc'||modes[0]==='both') ? 'Confira a soma dos incrementais com o último valor absoluto.'
+              : 'X e Y são posição no plano — sem coluna extra aqui.'
     ]
   };
 }
