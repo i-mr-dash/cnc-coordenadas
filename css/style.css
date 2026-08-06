@@ -73,7 +73,9 @@ button{font-family:inherit}
 .logo{
   width:36px;height:36px;border-radius:var(--r-sm);display:grid;place-items:center;font-size:20px;
   background:var(--acc); color:var(--on-acc,#191100); font-weight:900;
+  cursor:default; -webkit-user-select:none; user-select:none;
 }
+.logo.dev-on{box-shadow:0 0 0 2px var(--ok)}
 .brand-title{font-weight:800; letter-spacing:.5px; font-size:15px}
 .brand-title span{color:var(--acc)}
 .brand-sub{font-size:11px;color:var(--muted)}

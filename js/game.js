@@ -66,7 +66,7 @@ function switchMachine(m){
 
 /* ---------------- estado ---------------- */
 const DEF = {xp:0, coins:0, hints:3, stars:{}, unlocked:[], owned:[], theme:'steel',
-             tutorial:false, endlessRun:0, best:{}, streak:0, bestStreak:0, machine:'torno'};
+             tutorial:false, endlessRun:0, best:{}, streak:0, bestStreak:0, machine:'torno', dev:false};
 let S = load();
 LEVELS = levelsFor(S.machine); MAX_STARS=maxStarsFor(S.machine); BOSS_STARS=bossStarsFor(S.machine);
 function load(){
@@ -106,6 +106,7 @@ function sanitize(raw){
   s.endlessRun=cap(raw.endlessRun,0,99999); s.bestStreak=cap(raw.bestStreak,0,9999);
   s.streak=Math.min(cap(raw.streak,0,9999), s.bestStreak);
   s.tutorial=!!raw.tutorial;
+  s.dev=!!raw.dev;
   s.stars=clampObj(raw.stars,3); s.best=clampObj(raw.best,86400);
   s.unlocked=[...new Set(arr(raw.unlocked))]; s.owned=[...new Set(arr(raw.owned))];
   if(s.unlocked.includes('th_blue')||s.owned.includes('th_blue')){   // tema renomeado
@@ -133,7 +134,7 @@ const HINT_TIER = {};
 const totalStars = () => Object.values(S.stars).reduce((a,b)=>a+(+b||0),0);
 const rankOf = xp => RANKS.filter(r=>xp>=r[0]).pop();
 const nextRank = xp => RANKS.find(r=>xp<r[0]);
-const has = id => S.unlocked.includes(id) || S.owned.includes(id);
+const has = id => S.dev || S.unlocked.includes(id) || S.owned.includes(id);
 const done = id => (S.stars[id]||0) > 0;
 const fmt = n => { const v=Math.round(n*1000)/1000; return (v===0?0:v).toString(); };
 const mmss = s => String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
@@ -222,6 +223,23 @@ $('#navShop').onclick=()=>{ if(!has('shop')){toast('A Loja abre ao completar a f
 $('#navHelp').onclick=()=>show('help');
 $('#btnBack').onclick=()=>show('map');
 
+/* ---------------- modo desenvolvedor (7 cliques no logo) ---------------- */
+(function(){
+  let clicks=[];
+  if(S.dev) $('#logoMark').classList.add('dev-on');
+  $('#logoMark').addEventListener('click',()=>{
+    const now=Date.now();
+    clicks=clicks.filter(t=>now-t<3000); clicks.push(now);
+    if(clicks.length>=7){
+      clicks=[];
+      S.dev=!S.dev; save();
+      $('#logoMark').classList.toggle('dev-on', S.dev);
+      toast(S.dev?'Modo desenvolvedor ativado — tudo desbloqueado.':'Modo desenvolvedor desativado.', 3000);
+      if($('#screen-map').classList.contains('active')) renderMap();
+    }
+  });
+})();
+
 /* ---------------- escolha de máquina ---------------- */
 function renderChoose(){
   $$('#chooseTrack [data-machine]').forEach(d=>{
@@ -240,6 +258,7 @@ $$('#chooseTrack [data-machine]').forEach(d=>{
 
 /* ---------------- mapa ---------------- */
 function isUnlocked(lv){
+  if(S.dev) return true;
   const i=LEVELS.indexOf(lv);
   if(i<=0) return true;
   if(S.stars[skey(lv)]) return true;
