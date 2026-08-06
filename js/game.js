@@ -1160,6 +1160,7 @@ function drawTorno(W,H,C){
   const sy=x=> cy-(x/2)*sc;
   const hlPt = P.hl>=0 ? P.lv.pts[P.hl] : null;
   const mark = has('marker') && hlPt;
+  const boxes=[];   // áreas já ocupadas por rótulos, pra evitar sobreposição entre cotas e pontos
 
   /* grade ancorada no zero */
   if(view.grid){
@@ -1242,6 +1243,8 @@ function drawTorno(W,H,C){
       ctx.globalAlpha=1; ctx.fillStyle=C.paper; ctx.fillRect(-w/2-3,-8,w+6,14);
       ctx.fillStyle=on?C.acc:C.dim; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(txt,0,0); ctx.restore(); ctx.textBaseline='alphabetic';
+      /* reserva a faixa vertical do rótulo (rotacionado) pra rótulos de ponto não cobrirem */
+      for(let k=-1;k<=1;k++) boxes.push({x:X-6, y:ty+k*(w/2+4), w:16});
       ctx.globalAlpha=1; ctx.lineWidth=1;
     });
 
@@ -1301,7 +1304,6 @@ function drawTorno(W,H,C){
   }
 
   /* pontos + rótulos */
-  const boxes=[];
   path.forEach(p=>{
     const X=sx(p.z), Y=sy(p.x);
     HIT.push({r:P.lv.pts.indexOf(p), x:X, y:Y});
