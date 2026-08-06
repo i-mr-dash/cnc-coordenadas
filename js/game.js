@@ -1027,9 +1027,9 @@ function _draw(){
   const zneg=[...new Set(pts.map(p=>p.z).filter(z=>z<0))].sort((a,b)=>b-a);
   const zpos=[...new Set(path.map(p=>p.z).filter(z=>z>0))];
 
-  const dstep=Math.max(24, Math.min(28, (H*0.48)/Math.max(1,zneg.length)));
-  const botPad=view.dims? 22+zneg.length*dstep : 26;
-  const padL=Math.min(60,W*0.14), padR=Math.min(36,W*0.09), topPad=Math.min(44,H*0.11);
+  const dstep=Math.max(22, Math.min(26, (H*0.44)/Math.max(1,zneg.length)));
+  const botPad=view.dims? 18+zneg.length*dstep : 22;
+  const padL=Math.min(60,W*0.14), padR=Math.min(36,W*0.09), topPad=Math.min(34,H*0.09);
   const availW=Math.max(60, W-padL-padR), availH=Math.max(60, H-topPad-botPad);
   const sc=Math.min(availW/((zmax-zmin)||1), availH/xmax)*0.94;
   const cy=topPad+availH/2;
@@ -1133,7 +1133,7 @@ function _draw(){
       }
     }
     /* comprimentos negativos */
-    const y0=cy+xmax/2*sc+22;
+    const y0=cy+xmax/2*sc+16;
     zneg.forEach((z,i)=>{
       const on = mark && hlPt.z===z;
       ctx.strokeStyle=on?C.acc:C.dim; ctx.fillStyle=on?C.acc:C.dim; ctx.lineWidth=on?2:1;
