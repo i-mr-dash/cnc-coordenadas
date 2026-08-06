@@ -31,6 +31,18 @@
   --on-acc:#ffffff; --on-acc2:#ffffff;
   --shadow:0 4px 14px rgba(20,35,55,.14);
 }
+[data-theme="brasa"]{
+  --bg:#0a0707; --bg2:#130c0c; --panel:#1a1010; --panel2:#221515;
+  --line:#3a1f1f; --ink:#f5e9e6; --muted:#a88888; --ok:#3ecf7a; --err:#ff5d5d;
+  --acc:#d62828; --acc2:#c98a7a; --paper:#0e0808; --draw:#f2e4e0; --dim:#c98a7a; --pt:#ff8a5c;
+  --on-acc:#ffffff; --on-acc2:#1a0505;
+}
+[data-theme="forja"]{
+  --bg:#0a0908; --bg2:#141210; --panel:#1c1815; --panel2:#24201b;
+  --line:#3d3427; --ink:#f2ecdf; --muted:#a89c85; --ok:#4ac97a; --err:#ff5d5d;
+  --acc:#e8b923; --acc2:#c9a86a; --paper:#100e0c; --draw:#efe6d2; --dim:#c9a86a; --pt:#f0c14b;
+  --on-acc:#1a1200; --on-acc2:#1a1200;
+}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .skip{position:absolute;left:-9999px}
 .skip:focus{left:8px;top:8px;z-index:100;background:var(--panel);color:var(--ink);padding:10px 14px;border-radius:8px;border:2px solid var(--acc2)}
@@ -92,7 +104,7 @@ button{font-family:inherit}
 .btn.sm{padding:6px 12px;font-size:13px}
 .btn:disabled{opacity:1;color:var(--muted);background:transparent;border-style:dashed;cursor:not-allowed}
 .btn.locked-soft{opacity:.72;border-style:dashed}
-#btnCheck.ready{border-color:var(--acc);color:var(--acc)}
+#btnCheck.ready{box-shadow:inset 0 0 0 2px var(--on-acc,#1a1200)}
 .btn small{opacity:.7;font-weight:500}
 
 /* ---------- telas ---------- */

@@ -36,7 +36,9 @@ const THEMES = [
   {t:'steel',    name:'Oficina (padrão)', price:0,   desc:'Visual escuro de chão de fábrica.'},
   {t:'blueprint',name:'Blueprint',        price:180, unlock:'th_blueprint', desc:'Prancheta azul. Sai de graça ao completar a fase 3.'},
   {t:'paper',    name:'Impressão',        price:80, desc:'Fundo claro, cara de folha de processo impressa.'},
-  {t:'neon',     name:'Neon',             price:250, unlock:'th_neon', desc:'Oficina cyberpunk. Sai de graça ao completar a fase 12.'}
+  {t:'neon',     name:'Neon',             price:250, unlock:'th_neon', desc:'Oficina cyberpunk. Sai de graça ao completar a fase 12.'},
+  {t:'brasa',    name:'Brasa',            price:150, desc:'Preto e vermelho, fundo quase todo escuro.'},
+  {t:'forja',    name:'Forja',            price:150, desc:'Preto e dourado, acento único bem forte.'}
 ];
 const REVEAL_COST = 40;
 const TOL = 0.005;
@@ -1152,8 +1154,9 @@ function drawTorno(W,H,C){
   const padL=Math.min(60,W*0.14), padR=Math.min(36,W*0.09), topPad=Math.min(34,H*0.09);
   const availW=Math.max(60, W-padL-padR), availH=Math.max(60, H-topPad-botPad);
   const sc=Math.min(availW/((zmax-zmin)||1), availH/xmax)*0.94;
+  const scX=Math.min(sc*1.28, availW/((zmax-zmin)||1)*0.94);   // Z esticado um pouco quando sobra largura
   const cy=topPad+availH/2;
-  const sx=z=> padL+(z-zmin)*sc;
+  const sx=z=> padL+(z-zmin)*scX;
   const sy=x=> cy-(x/2)*sc;
   const hlPt = P.hl>=0 ? P.lv.pts[P.hl] : null;
   const mark = has('marker') && hlPt;
