@@ -223,7 +223,6 @@ $('#navShop').onclick=()=>{ if(!has('shop')){toast('A Loja abre ao completar a f
 $('#navHelp').onclick=()=>show('help');
 $('#btnBack').onclick=()=>show('map');
 
-/* ---------------- modo desenvolvedor (7 cliques no logo) ---------------- */
 (function(){
   let clicks=[];
   if(S.dev) $('#logoMark').classList.add('dev-on');
