@@ -1345,10 +1345,13 @@ function drawFresa(W,H,C){
   const xmin=Math.min(0,...xsAll), xmax=Math.max(0,...xsAll);
   const ymin=Math.min(0,...ysAll), ymax=Math.max(0,...ysAll);
   const xsPos=[...new Set(path.map(p=>p.x).filter(x=>x!==0))].sort((a,b)=>a-b);
+  const ysPos=[...new Set(path.map(p=>p.z).filter(z=>z!==0))].sort((a,b)=>a-b);
 
   const dstep=Math.max(22, Math.min(26, (H*0.44)/Math.max(1,xsPos.length)));
+  const dstepY=Math.max(22, Math.min(26, (W*0.34)/Math.max(1,ysPos.length)));
   const botPad=view.dims? 18+xsPos.length*dstep : 30;
-  const padL=Math.min(70,W*0.16), padR=Math.min(40,W*0.10), topPad=Math.min(34,H*0.09);
+  const leftDim=view.dims? 18+ysPos.length*dstepY : 0;
+  const padL=Math.min(70,W*0.16)+leftDim, padR=Math.min(40,W*0.10), topPad=Math.min(34,H*0.09);
   const availW=Math.max(60, W-padL-padR), availH=Math.max(60, H-topPad-botPad);
   const sc=Math.min(availW/((xmax-xmin)||1), availH/((ymax-ymin)||1))*0.94;
   const sx=x=> padL+(x-xmin)*sc;
@@ -1425,6 +1428,26 @@ function drawFresa(W,H,C){
       const txt=fmt(x), tw=ctx.measureText(txt).width, mxx=(X+X0)/2;
       ctx.save(); ctx.fillStyle=C.paper; ctx.fillRect(mxx-tw/2-3, Y-14, tw+6, 13); ctx.restore();
       ctx.fillText(txt, mxx, Y-4);
+      ctx.lineWidth=1;
+    });
+
+    /* cotas de Y empilhadas à esquerda do bloco */
+    const xLeft=sx(xmin);
+    ysPos.forEach((y,i)=>{
+      const on = mark && hlPt.z===y;
+      ctx.strokeStyle=on?C.acc:C.dim; ctx.fillStyle=on?C.acc:C.dim; ctx.lineWidth=on?2:1;
+      const X=xLeft-16-i*dstepY, Y=sy(y), Y0=sy(0);
+      ctx.globalAlpha=.35;
+      ctx.beginPath(); ctx.moveTo(xLeft-3,Y); ctx.lineTo(X-4,Y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(xLeft-3,Y0); ctx.lineTo(X-4,Y0); ctx.stroke();
+      ctx.globalAlpha=1;
+      arrow(ctx,X,Y0,X,Y); arrow(ctx,X,Y,X,Y0);
+      const txt=fmt(y), ty=(Y+Y0)/2;
+      ctx.save(); ctx.translate(X-6,ty); ctx.rotate(-Math.PI/2);
+      const tw=ctx.measureText(txt).width;
+      ctx.fillStyle=C.paper; ctx.fillRect(-tw/2-3,-8,tw+6,14);
+      ctx.fillStyle=on?C.acc:C.dim; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(txt,0,0); ctx.restore(); ctx.textBaseline='alphabetic';
       ctx.lineWidth=1;
     });
   }
