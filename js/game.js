@@ -1027,8 +1027,8 @@ function _draw(){
   const zneg=[...new Set(pts.map(p=>p.z).filter(z=>z<0))].sort((a,b)=>b-a);
   const zpos=[...new Set(path.map(p=>p.z).filter(z=>z>0))];
 
-  const dstep=Math.max(28, Math.min(34, (H*0.55)/Math.max(1,zneg.length)));
-  const botPad=view.dims? 30+zneg.length*dstep : 26;
+  const dstep=Math.max(24, Math.min(28, (H*0.48)/Math.max(1,zneg.length)));
+  const botPad=view.dims? 22+zneg.length*dstep : 26;
   const padL=Math.min(86,W*0.2), padR=Math.min(54,W*0.13), topPad=Math.min(44,H*0.11);
   const availW=Math.max(60, W-padL-padR), availH=Math.max(60, H-topPad-botPad);
   const sc=Math.min(availW/((zmax-zmin)||1), availH/xmax)*0.94;
