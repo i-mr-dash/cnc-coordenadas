@@ -184,6 +184,7 @@ button{font-family:inherit}
 #coordTable th.grp{color:var(--acc2)}
 #coordTable td{border-bottom:1px solid var(--line);padding:4px;text-align:center}
 #coordTable td.lbl{font-weight:800;color:var(--acc);width:52px;font-family:var(--mono)}
+#coordTable td.nacell{color:var(--line);font-family:var(--mono)}
 #coordTable tr.hl td{background:color-mix(in srgb,var(--acc2) 18%,transparent)}
 #coordTable tr.hl td.lbl{box-shadow:inset 3px 0 0 var(--acc2)}
 #coordTable input,#coordTable select{

@@ -265,24 +265,25 @@ const LEVELS_TORNO = [
   ]
 },
 {
-  id:14, name:'Programa Completo', sub:'G-code com chanfro e cone', modes:['gcode'], boss:false,
-  tip:'Aproxime sempre no ar (G0) até 2 mm da peça e só depois use G1.',
-  brief:'Programa de acabamento inteiro, do ponto seguro até o recuo.',
+  id:14, name:'Programa Completo', sub:'G-code com chanfro, arco e cone', modes:['gcode'], boss:false,
+  tip:'Aproxime sempre no ar (G0). Corte reto é G1; corte em arco é G2 (horário) ou G3 (anti-horário), com o raio na coluna R.',
+  brief:'Programa de acabamento inteiro, do ponto seguro até o recuo — agora com um arco de verdade (G2).',
   pts:[
     {id:'N10', x:120,z:50, g:'G0', safe:true, note:'ponto de troca'},
     {id:'N20', x:14, z:2,  g:'G0', note:'aproximação rápida'},
     {id:'N30', x:14, z:0,  g:'G1'},
     {id:'N40', x:20, z:-3, g:'G1', note:'chanfro 3x45°'},
     {id:'N50', x:20, z:-22,g:'G1'},
-    {id:'N60', x:32, z:-22,g:'G1'},
+    {id:'N60', x:32, z:-28,g:'G2', arc:6, note:'arco R6, sentido horário — liga o ø20 ao ø32'},
     {id:'N70', x:32, z:-46,g:'G1'},
     {id:'N80', x:50, z:-55,g:'G1', note:'cone'},
     {id:'N90', x:50, z:-70,g:'G1'},
     {id:'N100',x:120,z:50, g:'G0', safe:true, note:'recuo'}
   ],
   hints:[
-    'Blocos N10, N20 e N100 são no ar → G0. Todo o resto é G1.',
+    'Blocos N10, N20 e N100 são no ar → G0. Retas cortando são G1; o arco é G2.',
     'O chanfro 3x45° sai de ø14 (=20−6) na face e termina em ø20 Z−3.',
+    'N50→N60 é o arco: função G2 (sentido horário), raio R6 — soma 6 mm no raio (12 no diâmetro) e 6 mm em Z. A coluna R desse bloco vale 6.',
     'N70→N80 é cone: X vai a 50 enquanto Z vai a −55.'
   ]
 },

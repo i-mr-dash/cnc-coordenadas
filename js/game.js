@@ -325,8 +325,8 @@ function renderMap(){
 }
 
 /* ---------------- colunas por modo ---------------- */
-const KLBL_TORNO={ax:'X (absoluto)', az:'Z (absoluto)', ix:'ΔX', iz:'ΔZ', g:'função G'};
-const KLBL_FRESA={ax:'X (absoluto)', az:'Y (absoluto)', ix:'ΔX', iz:'ΔY', g:'função G'};
+const KLBL_TORNO={ax:'X (absoluto)', az:'Z (absoluto)', ix:'ΔX', iz:'ΔZ', g:'função G', r:'raio R'};
+const KLBL_FRESA={ax:'X (absoluto)', az:'Y (absoluto)', ix:'ΔX', iz:'ΔY', g:'função G', r:'raio R'};
 const klblFor = m => m==='fresa' ? KLBL_FRESA : KLBL_TORNO;
 function colsOf(lv){
   const m=lv.modes[0], fresa=(lv.machine||S.machine)==='fresa';
@@ -336,10 +336,13 @@ function colsOf(lv){
   if(m==='both') return [{k:'ax',h:'X',g:'ABSOLUTAS'},{k:'az',h:Z,g:'ABSOLUTAS'},
                          {k:'ix',h:'ΔX',g:'INCREMENTAIS'},{k:'iz',h:'Δ'+Z,g:'INCREMENTAIS'}];
   if(m!=='gcode') console.warn('modo desconhecido:',m);
-  return [{k:'g',h:'Função',g:'BLOCO'},{k:'ax',h:'X',g:'BLOCO'},{k:'az',h:Z,g:'BLOCO'}];
+  const cols=[{k:'g',h:'Função',g:'BLOCO'},{k:'ax',h:'X',g:'BLOCO'},{k:'az',h:Z,g:'BLOCO'}];
+  if(lv.pts.some(p=>p.arc)) cols.push({k:'r',h:'R',g:'BLOCO'});
+  return cols;
 }
 function expected(lv,r,k){
   const p=lv.pts[r], pv=r>0?lv.pts[r-1]:{x:0,z:0};
+  if(k==='r')  return p.arc;
   if(k==='ax') return p.x;
   if(k==='az') return p.z;
   if(k==='ix') return +(p.x-pv.x).toFixed(3);
@@ -407,7 +410,9 @@ function buildTable(lv){
     const lbl = inc ? ((r>0?lv.pts[r-1].id:'0')+' → '+p.id) : p.id;
     h+=`<tr data-r="${r}"><td class="lbl">${lbl}</td>`+
       cols.map(c=> c.k==='g'
-        ? `<td><select aria-label="${lbl} — função G" data-r="${r}" data-k="g"><option value="">--</option><option>G0</option><option>G1</option></select></td>`
+        ? `<td><select aria-label="${lbl} — função G" data-r="${r}" data-k="g"><option value="">--</option><option>G0</option><option>G1</option><option>G2</option><option>G3</option></select></td>`
+        : c.k==='r' && !p.arc
+        ? `<td class="nacell" aria-label="${lbl} — raio: não se aplica">—</td>`
         /* colunas de Z pedem sinal negativo: inputmode text traz o teclado com "-" */
         : `<td><input type="text" inputmode="${c.k==='az'||c.k==='iz'?'text':'decimal'}"
              enterkeyhint="next" autocomplete="off" autocorrect="off"
@@ -445,8 +450,12 @@ function buildTable(lv){
     el.addEventListener('keydown',e=>{
       const list=all(), i=list.indexOf(el);
       if(e.key==='Enter'){ e.preventDefault(); if(i===list.length-1) check(); else list[i+1].focus(); }
-      else if(e.key==='ArrowDown'){ e.preventDefault(); const n=list[i+cols.length]; if(n) n.focus(); }
-      else if(e.key==='ArrowUp'){ e.preventDefault(); const n=list[i-cols.length]; if(n) n.focus(); }
+      else if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+        e.preventDefault();
+        const tr=el.closest('tr'), sib=e.key==='ArrowDown'?tr.nextElementSibling:tr.previousElementSibling;
+        const n=sib && sib.querySelector(`[data-k="${el.dataset.k}"]`);
+        if(n) n.focus();
+      }
     });
   });
   t.querySelectorAll('tbody tr').forEach(tr=>{
@@ -519,8 +528,12 @@ function diagnose(c){
   const v=c.val, e=c.exp, K=klblFor(lv.machine||S.machine);
   if(c.blank) return {code:'vazio', msg:`A célula <b>${K[c.k]}</b> do ponto <b>${p.id}</b> está vazia. De ${pv.id} para ${p.id} ${describeMove(pv,p)}`};
   if(c.bad)   return {code:'formato', msg:`O valor digitado em <b>${p.id}</b> não é um número. Use só dígitos, ponto ou vírgula e o sinal (ex.: <b>-20</b>).`};
-  if(c.k==='g') return {code:'gcode',
-    msg:`No bloco <b>${p.id}</b> ${e==='G0'?'a ferramenta se desloca <b>sem tirar cavaco</b>':'a ferramenta está <b>tirando cavaco</b>'} → <b>${e}</b>. Regra: <b>G0</b> só no ar; qualquer contato com o material é <b>G1</b>.`};
+  if(c.k==='g'){
+    const GDESC={G0:'a ferramenta se desloca <b>sem tirar cavaco</b>', G1:'a ferramenta corta em <b>linha reta</b>',
+      G2:'a ferramenta corta um <b>arco no sentido horário</b>', G3:'a ferramenta corta um <b>arco no sentido anti-horário</b>'};
+    return {code:'gcode',
+      msg:`No bloco <b>${p.id}</b> ${GDESC[e]||'a ferramenta se move'} → <b>${e}</b>. Regra: <b>G0</b> só no ar; corte reto é <b>G1</b>; corte em arco é <b>G2</b> (horário) ou <b>G3</b> (anti-horário).`};
+  }
   if(r>0 && eq(v, expected(lv,r-1,c.k))) return {code:'linha',
     msg:`Em <b>${p.id}</b> o valor <b>${fmt(v)}</b> é o mesmo da linha de cima (${pv.id}). De ${pv.id} para ${p.id} ${describeMove(pv,p)}`+(fresa?'':' Se você quis escrever o raio, lembre que X é sempre <b>diâmetro</b>.')};
   if(!fresa && (c.k==='ax'||c.k==='ix') && e!==0 && eq(v*2,e)) return {code:'raio',
@@ -657,8 +670,14 @@ function explainRows(lv){
     if(p.safe) bits.push(fresa
       ? '<b>Onde ler:</b> este ponto não está no desenho — é o ponto de aproximação, longe da peça (X e Y bem afastados, geralmente negativos).'
       : '<b>Onde ler:</b> este ponto não está no desenho — é posição de segurança/troca, longe da peça (X grande, Z positivo).');
-    if(cols.some(c=>c.k==='g'))
-      bits.push(`<b>A função:</b> <em>${p.g}</em> — ${p.g==='G0'?'a ferramenta não toca o material: deslocamento rápido, sem avanço programado':'há material sendo cortado: avanço de trabalho (F)'}.`);
+    if(cols.some(c=>c.k==='g')){
+      const GEXP={G0:'a ferramenta não toca o material: deslocamento rápido, sem avanço programado',
+        G1:'há material sendo cortado em linha reta: avanço de trabalho (F)',
+        G2:'corte em arco no sentido horário: avanço de trabalho (F) e raio (R)',
+        G3:'corte em arco no sentido anti-horário: avanço de trabalho (F) e raio (R)'};
+      bits.push(`<b>A função:</b> <em>${p.g}</em> — ${GEXP[p.g]||''}.`);
+    }
+    if(p.arc) bits.push(`<b>R:</b> o arco tem raio <em>${fmt(p.arc)}</em>.`);
     if(hasAbs){
       if(fresa){
         bits.push(p.safe
