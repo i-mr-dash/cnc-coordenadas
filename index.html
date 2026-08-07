@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" href="icon.png">
-<link rel="stylesheet" href="css/style.css?v=15">
+<link rel="stylesheet" href="css/style.css?v=16">
 </head>
 <body data-theme="steel">
 <a href="#app" class="skip">Pular para o conteúdo</a>
@@ -106,9 +106,16 @@
             <button class="mini" id="tglGrid" aria-label="Mostrar ou ocultar grade" title="Grade">Grade</button>
             <button class="mini" id="tglAxis" aria-label="Mostrar ou ocultar eixos" title="Eixos">Eixos</button>
             <button class="mini" id="tglGhost" aria-label="Mostrar o perfil que seus números desenham" title="Desenha, em tracejado, o perfil que os SEUS números formam">Meu perfil</button>
+            <span class="zoom-tools" role="group" aria-label="Zoom do desenho">
+              <button class="mini" id="zoomOut" aria-label="Diminuir zoom" title="Diminuir zoom">－</button>
+              <button class="mini zoom-pct" id="zoomReset" aria-label="Redefinir zoom" title="Clique para redefinir o zoom">100%</button>
+              <button class="mini" id="zoomIn" aria-label="Aumentar zoom" title="Aumentar zoom">＋</button>
+            </span>
           </div>
         </div>
-        <canvas id="cv" role="img" aria-label="Desenho técnico da peça"></canvas>
+        <div class="cv-wrap">
+          <canvas id="cv" role="img" aria-label="Desenho técnico da peça"></canvas>
+        </div>
         <div class="legend">
           <span><i class="dot"></i> pontos do perfil</span>
           <span id="legendCenter"><i class="ln"></i> linha de centro</span>
@@ -203,6 +210,6 @@
 <canvas id="fx"></canvas>
 
 <script src="js/levels.js?v=9"></script>
-<script src="js/game.js?v=12"></script>
+<script src="js/game.js?v=13"></script>
 </body>
 </html>
