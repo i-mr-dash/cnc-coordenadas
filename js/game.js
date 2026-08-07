@@ -1226,10 +1226,18 @@ function drawTorno(W,H,C){
   ctx.lineWidth=2.4; ctx.strokeStyle=C.draw; ctx.lineJoin='round';
   ctx.beginPath();
   ctx.moveTo(sx(pts[0].z), sy(pts[0].x));
-  pts.forEach(p=>ctx.lineTo(sx(p.z),sy(p.x)));
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1], p=pts[i];
+    if(p.arc) ctx.quadraticCurveTo(sx(a.z), sy(p.x), sx(p.z), sy(p.x));
+    else ctx.lineTo(sx(p.z), sy(p.x));
+  }
   const last=pts[pts.length-1];
   ctx.lineTo(sx(last.z), cy+(last.x/2)*sc);
-  [...pts].reverse().forEach(p=>ctx.lineTo(sx(p.z), cy+(p.x/2)*sc));
+  for(let i=pts.length-2;i>=0;i--){
+    const p=pts[i], nextp=pts[i+1];
+    if(nextp.arc) ctx.quadraticCurveTo(sx(p.z), cy+(nextp.x/2)*sc, sx(p.z), cy+(p.x/2)*sc);
+    else ctx.lineTo(sx(p.z), cy+(p.x/2)*sc);
+  }
   ctx.closePath();
   ctx.save(); ctx.globalAlpha=.13; ctx.fillStyle=C.draw; ctx.fill();
   ctx.clip(); ctx.globalAlpha=.07; ctx.strokeStyle=C.draw; ctx.lineWidth=1;
@@ -1426,7 +1434,11 @@ function drawFresa(W,H,C){
   ctx.lineWidth=2.4; ctx.strokeStyle=C.draw; ctx.lineJoin='round'; ctx.lineCap='round';
   ctx.beginPath();
   ctx.moveTo(sx(path[0].x), sy(path[0].z));
-  path.forEach(p=>ctx.lineTo(sx(p.x), sy(p.z)));
+  for(let i=1;i<path.length;i++){
+    const a=path[i-1], p=path[i];
+    if(p.arc) ctx.quadraticCurveTo(sx(p.x), sy(a.z), sx(p.x), sy(p.z));
+    else ctx.lineTo(sx(p.x), sy(p.z));
+  }
   ctx.stroke();
 
   /* origem — canto de referência da peça */
