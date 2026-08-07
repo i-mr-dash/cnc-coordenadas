@@ -1910,7 +1910,7 @@ function renderFresaFrame(sim,W,H,C,raw,i,t,tip,now){
 }
 
 function playMachining(done){
-  if(!P || REDUCED){ done(); return; }
+  if(!P){ done(); return; }
   const lv=P.lv, fresa=(lv.machine||S.machine)==='fresa';
   const raw = fresa ? lv.pts.filter(p=>!p.safe) : lv.pts.filter(p=>!p.safe && p.z<=0);
   if(raw.length<2){ done(); return; }
