@@ -173,6 +173,7 @@ button{font-family:inherit}
 .zoom-pct{min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
 .cv-wrap.zoomed{cursor:grab}
 .cv-wrap.zoomed.panning{cursor:grabbing}
+.cv-wrap.machining{box-shadow:inset 0 0 0 2px var(--acc2)}
 .cv-wrap{position:relative;overflow:hidden;height:440px;height:min(46dvh,440px);touch-action:none}
 #cv{display:block;width:100%;height:100%;background:var(--paper)}
 .legend{display:flex;gap:16px;flex-wrap:wrap;padding:8px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--line)}

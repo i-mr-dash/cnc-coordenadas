@@ -181,6 +181,57 @@ const sndErr  = ()=>beep(150,.18,'square',.05);
 const sndWin  = ()=>{[523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,.16,'triangle'),i*110));};
 const sndCoin = ()=>{beep(1200,.05,'square',.04);setTimeout(()=>beep(1600,.07,'square',.04),60);};
 
+/* ---------------- som de usinagem (motor + corte, sintetizado) ---------------- */
+let machNodes=null;
+function machSoundStart(kind){
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==='suspended') AC.resume();
+    const t=AC.currentTime;
+    const master=AC.createGain(); master.gain.setValueAtTime(0,t); master.gain.linearRampToValueAtTime(.5,t+.35);
+    master.connect(AC.destination);
+
+    const spindle=AC.createOscillator();
+    spindle.type='sawtooth';
+    spindle.frequency.setValueAtTime(28,t);
+    spindle.frequency.exponentialRampToValueAtTime(kind==='fresa'?260:120, t+.55);
+    const spindleFilt=AC.createBiquadFilter(); spindleFilt.type='lowpass'; spindleFilt.frequency.value=kind==='fresa'?1500:750;
+    const spindleGain=AC.createGain(); spindleGain.gain.value=.5;
+    spindle.connect(spindleFilt); spindleFilt.connect(spindleGain); spindleGain.connect(master);
+    spindle.start();
+
+    const buf=AC.createBuffer(1, AC.sampleRate*2, AC.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    const noise=AC.createBufferSource(); noise.buffer=buf; noise.loop=true;
+    const noiseFilt=AC.createBiquadFilter(); noiseFilt.type='bandpass'; noiseFilt.frequency.value=kind==='fresa'?2600:1200; noiseFilt.Q.value=.8;
+    const cutGain=AC.createGain(); cutGain.gain.value=0;
+    noise.connect(noiseFilt); noiseFilt.connect(cutGain); cutGain.connect(master);
+    noise.start();
+
+    machNodes={master,spindle,noise,cutGain};
+  }catch(e){ machNodes=null; }
+}
+function machSoundCutting(active){
+  if(!machNodes) return;
+  try{
+    const t=AC.currentTime;
+    machNodes.cutGain.gain.cancelScheduledValues(t);
+    machNodes.cutGain.gain.linearRampToValueAtTime(active?.22:0, t+.08);
+  }catch(e){}
+}
+function machSoundStop(){
+  if(!machNodes) return;
+  const {master,spindle,noise}=machNodes; machNodes=null;
+  try{
+    const t=AC.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.linearRampToValueAtTime(0, t+.25);
+    setTimeout(()=>{ try{spindle.stop(); noise.stop();}catch(e){} }, 320);
+  }catch(e){}
+}
+function machChip(){ beep(1700+Math.random()*900, .02, 'square', .014); }
+
 /* ---------------- HUD ---------------- */
 function hud(){
   const [minXp,name]=rankOf(S.xp), nx=nextRank(S.xp);
@@ -612,7 +663,7 @@ function check(){
   draw();
   const bad=infos.filter(c=>!c.ok);
   const fb=$('#feedback');
-  if(!bad.length){ win(); return; }
+  if(!bad.length){ if(animActive) return; playMachining(()=>win()); return; }
   if(bad.length===infos.length && bad.every(c=>c.blank)){
     fb.className='feedback bad';
     fb.textContent='Preencha a tabela antes de verificar — esta não conta como tentativa.';
@@ -1121,6 +1172,7 @@ function updateZoomUI(){
   cvWrap.classList.toggle('zoomed',cam.zoom>1.001);
 }
 function zoomAt(factor,cx,cy){
+  if(animActive) return;
   const old=cam.zoom;
   cam.zoom=Math.min(ZMAX,Math.max(ZMIN,cam.zoom*factor));
   const k=cam.zoom/old;
@@ -1145,7 +1197,7 @@ function pinchInfo(pts){
   return {dist:Math.hypot(dx,dy)||1, midX:(a.x+b.x)/2, midY:(a.y+b.y)/2};
 }
 cv.addEventListener('pointerdown',e=>{
-  if(!P) return;
+  if(!P || animActive) return;
   cv.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   movedDuringGesture=false;
@@ -1249,7 +1301,7 @@ function playerPts(lv){
 
 let _rafDraw=0;
 function draw(){                      // coalesce vários pedidos no mesmo frame
-  if(_rafDraw) return;
+  if(_rafDraw || animActive) return;
   _rafDraw=requestAnimationFrame(()=>{ _rafDraw=0; _draw(); });
 }
 function _draw(){
@@ -1659,6 +1711,275 @@ function arrow(c,x1,y1,x2,y2){
   c.lineTo(x2-s*Math.cos(a-.4), y2-s*Math.sin(a-.4));
   c.lineTo(x2-s*Math.cos(a+.4), y2-s*Math.sin(a+.4));
   c.closePath(); c.fill();
+}
+
+/* =========================================================================
+   ANIMAÇÃO DE USINAGEM — toca quando a tabela é verificada e está 100% certa
+   ========================================================================= */
+let animActive=false, _animRaf=0, _chips=[];
+
+function cornerOf(a,b){ return {x:b.x, z:a.z}; }
+function bezierAt(a,b,corner,t){
+  const x=(1-t)**2*a.x + 2*(1-t)*t*corner.x + t*t*b.x;
+  const z=(1-t)**2*a.z + 2*(1-t)*t*corner.z + t*t*b.z;
+  return {x,z};
+}
+function segPointAt(raw,i,t){
+  const a=raw[i], b=raw[i+1];
+  if(b.arc) return bezierAt(a,b,cornerOf(a,b),t);
+  return {x:a.x+(b.x-a.x)*t, z:a.z+(b.z-a.z)*t};
+}
+function spawnChip(sx,sy,fresa){
+  for(let n=0;n<3;n++){
+    _chips.push({
+      x:sx, y:sy,
+      vx:(Math.random()-.5)*(fresa?2.2:3.2) + (fresa?0:-1.6),
+      vy:-Math.random()*3-1,
+      r:Math.random()*Math.PI*2, vr:(Math.random()-.5)*.5,
+      s:2+Math.random()*3, a:1,
+      c: Math.random()<.7 ? '#e8b84b' : '#c98a3a'
+    });
+  }
+  if(_chips.length>220) _chips.splice(0,_chips.length-220);
+}
+function stepChips(dt){
+  const k=Math.min(3,dt/16);
+  _chips.forEach(p=>{ p.vy+=.18*k; p.x+=p.vx*k; p.y+=p.vy*k; p.r+=p.vr*k; p.a-=.022*k; });
+  _chips=_chips.filter(p=>p.a>0);
+}
+function drawChips(){
+  _chips.forEach(p=>{
+    ctx.save(); ctx.globalAlpha=Math.max(0,p.a); ctx.translate(p.x,p.y); ctx.rotate(p.r);
+    ctx.fillStyle=p.c; ctx.fillRect(-p.s/2,-p.s*.3,p.s,p.s*.6);
+    ctx.restore();
+  });
+}
+function drawTool(sx,sy,angleToPart){
+  ctx.save(); ctx.translate(sx,sy); ctx.rotate(angleToPart);
+  ctx.fillStyle='#9aa4b2'; ctx.strokeStyle='#4b525c'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(22,-6); ctx.lineTo(30,0); ctx.lineTo(22,6); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function buildTornoSim(raw,W,H){
+  const zmin=Math.min(...raw.map(p=>p.z)), zmax=Math.max(0,...raw.map(p=>p.z));
+  const xmax=Math.max(...raw.map(p=>p.x))||10;
+  const stockDia=xmax+Math.max(4,xmax*.14);
+  const padL=Math.min(60,W*.14), padR=Math.min(64,W*.13), topPad=Math.min(40,H*.10), botPad=Math.min(40,H*.10);
+  const availW=Math.max(60,W-padL-padR), availH=Math.max(60,H-topPad-botPad);
+  const sc=Math.min(availW/((zmax-zmin)||1), availH/stockDia)*.92;
+  const scX=Math.min(sc*1.28, availW/((zmax-zmin)||1)*.92);
+  const cy=topPad+availH/2;
+  const sx=z=>padL+(z-zmin)*scX, sy=x=>cy-(x/2)*sc;
+
+  function outlinePts(i,t){
+    if(i<0) return [{x:stockDia, z:raw[0].z}, {x:stockDia, z:raw[raw.length-1].z}];
+    const done=raw.slice(0,i+1).map(p=>({x:p.x,z:p.z,arc:p.arc}));
+    if(i+1<raw.length){
+      const b=raw[i+1], cur=segPointAt(raw,i,t);
+      done.push({x:cur.x, z:cur.z, arc: b.arc});
+      if(t<.999){ done.push({x:stockDia, z:cur.z}); done.push({x:stockDia, z:raw[raw.length-1].z}); }
+    }
+    return done;
+  }
+  function approach(t){
+    const start={x:stockDia+xmax*.3, z:raw[0].z+(zmax-zmin)*.25+10};
+    const end=raw[0], e=1-Math.pow(1-t,3);
+    return {x:start.x+(end.x-start.x)*e, z:start.z+(end.z-start.z)*e};
+  }
+  return {sx,sy,cy,sc,zmin,zmax,xmax,stockDia,outlinePts,approach};
+}
+function renderTornoFrame(sim,W,H,C,i,t,tip,now){
+  const {sx,sy,cy,sc,zmin,zmax,stockDia}=sim;
+  /* placa */
+  const cx0=sx(zmin), jawH=Math.max(stockDia/2*sc+26,40);
+  ctx.fillStyle=C.muted; ctx.globalAlpha=.3;
+  ctx.fillRect(cx0-28, cy-jawH, 26, jawH-8); ctx.fillRect(cx0-28, cy+8, 26, jawH-8);
+  ctx.globalAlpha=.75; ctx.lineWidth=1.2; ctx.strokeStyle=C.muted;
+  ctx.strokeRect(cx0-28, cy-jawH, 26, jawH-8); ctx.strokeRect(cx0-28, cy+8, 26, jawH-8);
+  ctx.globalAlpha=1;
+
+  /* corpo (perfil já usinado + o que ainda é bruto) */
+  const pts=sim.outlinePts(i,t);
+  if(pts.length){
+    ctx.lineWidth=2.2; ctx.strokeStyle=C.draw; ctx.lineJoin='round';
+    ctx.beginPath(); ctx.moveTo(sx(pts[0].z), sy(pts[0].x));
+    for(let k=1;k<pts.length;k++){
+      const a=pts[k-1], p=pts[k];
+      if(p.arc) ctx.quadraticCurveTo(sx(a.z), sy(p.x), sx(p.z), sy(p.x));
+      else ctx.lineTo(sx(p.z), sy(p.x));
+    }
+    const last=pts[pts.length-1];
+    ctx.lineTo(sx(last.z), cy+(last.x/2)*sc);
+    for(let k=pts.length-2;k>=0;k--){
+      const p=pts[k], nx=pts[k+1];
+      if(nx.arc) ctx.quadraticCurveTo(sx(p.z), cy+(nx.x/2)*sc, sx(p.z), cy+(p.x/2)*sc);
+      else ctx.lineTo(sx(p.z), cy+(p.x/2)*sc);
+    }
+    ctx.closePath();
+    ctx.save(); ctx.globalAlpha=.16; ctx.fillStyle=C.draw; ctx.fill();
+    ctx.clip();
+    /* hachura diagonal rolando = ilusão de a peça estar girando rápido */
+    ctx.globalAlpha=.09; ctx.strokeStyle=C.draw; ctx.lineWidth=1;
+    const off=(now/13)%18;
+    for(let k=-H-18;k<W+H;k+=9){ ctx.beginPath(); ctx.moveTo(k+off,0); ctx.lineTo(k+off+H,H); ctx.stroke(); }
+    ctx.globalAlpha=.5; ctx.strokeStyle=C.paper; ctx.lineWidth=2;
+    const glintY=cy - Math.sin(now/60)*((sy(0)-sy(stockDia))*.42);
+    ctx.beginPath(); ctx.moveTo(sx(zmin),glintY); ctx.lineTo(sx(zmax),glintY); ctx.stroke();
+    ctx.restore();
+    ctx.stroke();
+  }
+
+  /* linha de centro */
+  ctx.setLineDash([12,4,3,4]); ctx.strokeStyle=C.dim; ctx.lineWidth=1; ctx.globalAlpha=.8;
+  ctx.beginPath(); ctx.moveTo(sx(zmin)-30,cy); ctx.lineTo(sx(zmax)+34,cy); ctx.stroke();
+  ctx.setLineDash([]); ctx.globalAlpha=1;
+
+  /* ferramenta */
+  const tsx=sx(tip.z), tsy=sy(tip.x);
+  drawTool(tsx+30, tsy, Math.PI);
+  return {sx:tsx, sy:tsy};
+}
+
+function buildFresaSim(raw,W,H){
+  const xsAll=raw.map(p=>p.x), ysAll=raw.map(p=>p.z);
+  const xmin=Math.min(0,...xsAll), xmax=Math.max(0,...xsAll);
+  const ymin=Math.min(0,...ysAll), ymax=Math.max(0,...ysAll);
+  const m=16;
+  const padL=Math.min(70,W*.14), padR=Math.min(70,W*.12), topPad=Math.min(40,H*.10), botPad=Math.min(40,H*.10);
+  const availW=Math.max(60,W-padL-padR), availH=Math.max(60,H-topPad-botPad);
+  const sc=Math.min(availW/((xmax-xmin)||1), availH/((ymax-ymin)||1))*.9;
+  const sx=x=>padL+(x-xmin)*sc, sy=y=>topPad+availH-(y-ymin)*sc;
+  const rect={x0:sx(xmin)-m, y0:sy(ymax)-m, x1:sx(xmax)+m, y1:sy(ymin)+m};
+  function approach(t){
+    const start={x:xmin-m*3, z:ymax+m*3}, end=raw[0], e=1-Math.pow(1-t,3);
+    return {x:start.x+(end.x-start.x)*e, z:start.z+(end.z-start.z)*e};
+  }
+  return {sx,sy,rect,approach,xmin,xmax,ymin,ymax};
+}
+function renderFresaFrame(sim,W,H,C,raw,i,t,tip,now){
+  const {sx,sy,rect}=sim;
+  ctx.fillStyle=C.muted; ctx.globalAlpha=.22;
+  ctx.fillRect(rect.x0,rect.y0,rect.x1-rect.x0,rect.y1-rect.y0);
+  ctx.globalAlpha=1;
+  ctx.setLineDash([6,4]); ctx.strokeStyle=C.muted; ctx.lineWidth=1.2; ctx.globalAlpha=.6;
+  ctx.strokeRect(rect.x0,rect.y0,rect.x1-rect.x0,rect.y1-rect.y0);
+  ctx.setLineDash([]); ctx.globalAlpha=1;
+
+  if(i>=0){
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(sx(raw[0].x), sy(raw[0].z));
+    for(let k=1;k<=i;k++){
+      const a=raw[k-1], b=raw[k];
+      if(b.arc) ctx.quadraticCurveTo(sx(cornerOf(a,b).x), sy(cornerOf(a,b).z), sx(b.x), sy(b.z));
+      else ctx.lineTo(sx(b.x), sy(b.z));
+    }
+    ctx.lineTo(sx(tip.x), sy(tip.z));
+    ctx.lineWidth=15; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.strokeStyle=C.paper;
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.moveTo(sx(raw[0].x), sy(raw[0].z));
+    for(let k=1;k<=i;k++){
+      const a=raw[k-1], b=raw[k];
+      if(b.arc) ctx.quadraticCurveTo(sx(cornerOf(a,b).x), sy(cornerOf(a,b).z), sx(b.x), sy(b.z));
+      else ctx.lineTo(sx(b.x), sy(b.z));
+    }
+    ctx.lineTo(sx(tip.x), sy(tip.z));
+    ctx.lineWidth=2.2; ctx.strokeStyle=C.draw; ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.stroke();
+  }
+
+  const ox=sx(0), oy=sy(0);
+  ctx.strokeStyle=C.acc; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.arc(ox,oy,7,0,7); ctx.stroke();
+
+  /* fresa girando */
+  const tsx=sx(tip.x), tsy=sy(tip.z), spin=(now||0)/45;
+  ctx.save(); ctx.translate(tsx,tsy);
+  ctx.fillStyle='#9aa4b2'; ctx.strokeStyle='#4b525c'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.rotate(spin); ctx.strokeStyle='#4b525c'; ctx.lineWidth=1.4;
+  for(let k=0;k<3;k++){ ctx.save(); ctx.rotate(k*Math.PI*2/3);
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(9,0); ctx.stroke(); ctx.restore(); }
+  ctx.restore();
+  return {sx:tsx, sy:tsy};
+}
+
+function playMachining(done){
+  if(!P || REDUCED){ done(); return; }
+  const lv=P.lv, fresa=(lv.machine||S.machine)==='fresa';
+  const raw = fresa ? lv.pts.filter(p=>!p.safe) : lv.pts.filter(p=>!p.safe && p.z<=0);
+  if(raw.length<2){ done(); return; }
+  const W=cv.clientWidth, H=cv.clientHeight;
+  if(W<2||H<2){ done(); return; }
+
+  animActive=true; _chips=[];
+  cam.zoom=1; cam.tx=0; cam.ty=0; updateZoomUI();
+  cvWrap.classList.add('machining');
+
+  const sim = fresa ? buildFresaSim(raw,W,H) : buildTornoSim(raw,W,H);
+  const segLen=i=>Math.hypot(raw[i+1].x-raw[i].x, raw[i+1].z-raw[i].z)||.001;
+  const lens=raw.slice(0,-1).map((_,i)=>segLen(i));
+  const totalLen=lens.reduce((a,b)=>a+b,0)||1;
+  const cutDur=Math.min(9500,Math.max(3200,totalLen*95));
+  const approachDur=700;
+
+  machSoundStart(fresa?'fresa':'torno');
+  const t0=performance.now();
+  let lastSpawn=0, prevNow=t0;
+
+  function pickSeg(overallT){
+    let acc=0;
+    for(let k=0;k<lens.length;k++){
+      const frac=lens[k]/totalLen;
+      if(overallT<=acc+frac || k===lens.length-1) return {i:k, t: frac>0?Math.min(1,Math.max(0,(overallT-acc)/frac)):1};
+      acc+=frac;
+    }
+    return {i:lens.length-1, t:1};
+  }
+
+  function frame(now){
+    const C=themeColors();
+    ctx.clearRect(0,0,W,H); ctx.fillStyle=C.paper; ctx.fillRect(0,0,W,H);
+    const dt=now-prevNow; prevNow=now;
+    const elapsed=now-t0;
+    let tip, cutting=false, overallT=0, tipScreen;
+
+    if(elapsed<approachDur){
+      const at=Math.min(1,elapsed/approachDur);
+      tip=sim.approach(at);
+      machSoundCutting(false);
+      tipScreen = fresa ? renderFresaFrame(sim,W,H,C,raw,-1,0,tip,now)
+                        : renderTornoFrame(sim,W,H,C,-1,0,tip,now);
+    }else{
+      overallT=Math.min(1,(elapsed-approachDur)/cutDur);
+      const {i,t}=pickSeg(overallT);
+      cutting=true;
+      tip=segPointAt(raw,i,t);
+      tipScreen = fresa ? renderFresaFrame(sim,W,H,C,raw,i,t,tip,now)
+                        : renderTornoFrame(sim,W,H,C,i,t,tip,now);
+      machSoundCutting(true);
+    }
+
+    if(cutting && now-lastSpawn>55){ lastSpawn=now; spawnChip(tipScreen.sx,tipScreen.sy,fresa); if(Math.random()<.5) machChip(); }
+    stepChips(dt||16); drawChips();
+
+    if(overallT>=1){ finish(); return; }
+    _animRaf=requestAnimationFrame(frame);
+  }
+  function finish(){
+    machSoundStop();
+    cancelAnimationFrame(_animRaf);
+    animActive=false; _chips=[];
+    cvWrap.classList.remove('machining');
+    draw();
+    done();
+  }
+  _animRaf=requestAnimationFrame(frame);
 }
 
 /* =========================================================================
