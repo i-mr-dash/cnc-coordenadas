@@ -391,6 +391,7 @@ function startLevel(lv){
   buildTable(lv);
   syncExplainBtn();
   show('play');
+  resetCam();
   resize(); draw();
   cv.setAttribute('aria-label','Desenho técnico da peça. Pontos do perfil: '+
     (lv.machine==='fresa'
@@ -1089,21 +1090,105 @@ function renderHelp(){
 /* =========================================================================
    DESENHO TÉCNICO
    ========================================================================= */
-const cv=$('#cv'), ctx=cv.getContext('2d');
+const cv=$('#cv'), ctx=cv.getContext('2d'), cvWrap=$('.cv-wrap');
 const CVFONT='-apple-system, system-ui, "Segoe UI", Roboto, sans-serif';
 /* toque/clique no desenho seleciona o ponto mais próximo */
 const HIT=[];
-cv.addEventListener('pointerdown',e=>{
+function selectAt(clientX,clientY){
   if(!P || !HIT.length) return;
   const b=cv.getBoundingClientRect();
-  const px=e.clientX-b.left, py=e.clientY-b.top;
+  const px=(clientX-b.left-cam.tx)/cam.zoom, py=(clientY-b.top-cam.ty)/cam.zoom;
   let best=null, bd=Infinity;
   HIT.forEach(h=>{ const d=(h.x-px)**2+(h.y-py)**2; if(d<bd){bd=d; best=h;} });
-  if(!best || bd>46*46){ setHL(-1); return; }
+  if(!best || bd>(46/cam.zoom)*(46/cam.zoom)){ setHL(-1); return; }
   setHL(P.hl===best.r ? -1 : best.r);
   const el=document.querySelector(`#coordTable [data-r="${best.r}"]`);
   if(el) el.scrollIntoView({block:'nearest',behavior:REDUCED?'auto':'smooth'});
+}
+
+/* ---------------- zoom/pan do desenho técnico (só dentro do quadro do canvas) ---------------- */
+const cam={zoom:1, tx:0, ty:0};
+const ZMIN=1, ZMAX=6;
+function resetCam(){ cam.zoom=1; cam.tx=0; cam.ty=0; updateZoomUI(); }
+function clampPan(){
+  const W=cv.clientWidth, H=cv.clientHeight;
+  const minTx=Math.min(0,W-W*cam.zoom), minTy=Math.min(0,H-H*cam.zoom);
+  cam.tx=Math.min(0,Math.max(minTx,cam.tx));
+  cam.ty=Math.min(0,Math.max(minTy,cam.ty));
+}
+function updateZoomUI(){
+  $('#zoomReset').textContent=Math.round(cam.zoom*100)+'%';
+  cvWrap.classList.toggle('zoomed',cam.zoom>1.001);
+}
+function zoomAt(factor,cx,cy){
+  const old=cam.zoom;
+  cam.zoom=Math.min(ZMAX,Math.max(ZMIN,cam.zoom*factor));
+  const k=cam.zoom/old;
+  cam.tx=cx-(cx-cam.tx)*k; cam.ty=cy-(cy-cam.ty)*k;
+  if(cam.zoom<=ZMIN+.0001){ cam.tx=0; cam.ty=0; }
+  clampPan(); updateZoomUI(); draw();
+}
+cv.addEventListener('wheel',e=>{
+  if(!P) return;
+  e.preventDefault();
+  const b=cv.getBoundingClientRect();
+  zoomAt(e.deltaY<0?1.18:1/1.18, e.clientX-b.left, e.clientY-b.top);
+},{passive:false});
+$('#zoomIn').onclick=()=>zoomAt(1.35, cv.clientWidth/2, cv.clientHeight/2);
+$('#zoomOut').onclick=()=>zoomAt(1/1.35, cv.clientWidth/2, cv.clientHeight/2);
+$('#zoomReset').onclick=()=>{ resetCam(); draw(); };
+
+const pointers=new Map();
+let dragStart=null, pinchStart=null, movedDuringGesture=false;
+function pinchInfo(pts){
+  const [a,b]=pts, dx=a.x-b.x, dy=a.y-b.y;
+  return {dist:Math.hypot(dx,dy)||1, midX:(a.x+b.x)/2, midY:(a.y+b.y)/2};
+}
+cv.addEventListener('pointerdown',e=>{
+  if(!P) return;
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  movedDuringGesture=false;
+  if(pointers.size===1){
+    dragStart={x:e.clientX,y:e.clientY,tx:cam.tx,ty:cam.ty};
+    pinchStart=null;
+  }else if(pointers.size===2){
+    const b=cv.getBoundingClientRect();
+    const info=pinchInfo([...pointers.values()]);
+    pinchStart={dist:info.dist, zoom:cam.zoom, cx:info.midX-b.left, cy:info.midY-b.top, tx:cam.tx, ty:cam.ty};
+    dragStart=null;
+  }
 });
+cv.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size>=2 && pinchStart){
+    const info=pinchInfo([...pointers.values()]);
+    const newZoom=Math.min(ZMAX,Math.max(ZMIN, pinchStart.zoom*(info.dist/pinchStart.dist)));
+    const k=newZoom/pinchStart.zoom;
+    cam.zoom=newZoom;
+    cam.tx=pinchStart.cx-(pinchStart.cx-pinchStart.tx)*k;
+    cam.ty=pinchStart.cy-(pinchStart.cy-pinchStart.ty)*k;
+    clampPan(); updateZoomUI(); movedDuringGesture=true; draw();
+  }else if(pointers.size===1 && dragStart && cam.zoom>1.0001){
+    const dx=e.clientX-dragStart.x, dy=e.clientY-dragStart.y;
+    if(Math.abs(dx)>3||Math.abs(dy)>3) movedDuringGesture=true;
+    cam.tx=dragStart.tx+dx; cam.ty=dragStart.ty+dy;
+    clampPan(); cvWrap.classList.add('panning'); draw();
+  }
+});
+function endGesture(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size<2) pinchStart=null;
+  if(pointers.size===0){
+    cvWrap.classList.remove('panning');
+    if(!movedDuringGesture) selectAt(e.clientX,e.clientY);
+    dragStart=null;
+  }
+}
+cv.addEventListener('pointerup',endGesture);
+cv.addEventListener('pointercancel',endGesture);
+
 const view={dims:true, grid:true, axis:true, ghost:true};
 function bindToggle(id,key){
   $(id).onclick=e=>{ view[key]=!view[key];
@@ -1118,7 +1203,7 @@ function ghostAviso(){
 bindToggle('#tglDims','dims'); bindToggle('#tglGrid','grid');
 bindToggle('#tglAxis','axis'); bindToggle('#tglGhost','ghost');
 $('#tglGhost').addEventListener('click',ghostAviso);
-$$('.mini').forEach(m=>{m.classList.add('on'); m.setAttribute('aria-pressed','true');});
+$$('.mini-tools > .mini').forEach(m=>{m.classList.add('on'); m.setAttribute('aria-pressed','true');});
 
 function resize(){
   const r=cv.getBoundingClientRect(), d=window.devicePixelRatio||1;
@@ -1126,14 +1211,14 @@ function resize(){
   cv.width=r.width*d; cv.height=r.height*d; ctx.setTransform(d,0,0,d,0,0);
 }
 window.addEventListener('resize',()=>{
-  if($('#screen-play').classList.contains('active')){resize();draw();}
+  if($('#screen-play').classList.contains('active')){resize();clampPan();draw();}
 });
 /* o canvas cresce por flex: window.resize não dispara, então observa o elemento */
 if(window.ResizeObserver){
-  new ResizeObserver(()=>{ if($('#screen-play').classList.contains('active')){ resize(); draw(); } }).observe(cv);
+  new ResizeObserver(()=>{ if($('#screen-play').classList.contains('active')){ resize(); clampPan(); draw(); } }).observe(cv);
 }
 window.addEventListener('orientationchange',()=>
-  setTimeout(()=>{ if($('#screen-play').classList.contains('active')){resize();draw();} },350));
+  setTimeout(()=>{ if($('#screen-play').classList.contains('active')){resize();clampPan();draw();} },350));
 function themeColors(){
   const th=document.body.dataset.theme;
   if(CC && CC._t===th) return CC;
@@ -1175,7 +1260,11 @@ function _draw(){
   const C=themeColors();
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle=C.paper; ctx.fillRect(0,0,W,H);
+  ctx.save();
+  ctx.translate(cam.tx,cam.ty);
+  ctx.scale(cam.zoom,cam.zoom);
   if((P.lv.machine||S.machine)==='fresa') drawFresa(W,H,C); else drawTorno(W,H,C);
+  ctx.restore();
 }
 function drawTorno(W,H,C){
   const path=P.lv.pts.filter(p=>!p.safe);      // marcadores
