@@ -266,7 +266,7 @@ const LEVELS_TORNO = [
 },
 {
   id:14, name:'Programa Completo', sub:'G-code com chanfro, arco e cone', modes:['gcode'], boss:false,
-  tip:'Aproxime sempre no ar (G0). Corte reto é G1; corte em arco é G2 (horário) ou G3 (anti-horário), com o raio na coluna R.',
+  tip:'Aproxime sempre no ar (G0). Corte reto é G1; corte em arco é G2 (horário) ou G3 (anti-horário) — o raio não vira número na tabela: quem define o arco são a função e o ponto final (absoluto e incremental).',
   brief:'Programa de acabamento inteiro, do ponto seguro até o recuo — agora com um arco de verdade (G2).',
   pts:[
     {id:'N10', x:120,z:50, g:'G0', safe:true, note:'ponto de troca'},
@@ -283,7 +283,7 @@ const LEVELS_TORNO = [
   hints:[
     'Blocos N10, N20 e N100 são no ar → G0. Retas cortando são G1; o arco é G2.',
     'O chanfro 3x45° sai de ø14 (=20−6) na face e termina em ø20 Z−3.',
-    'N50→N60 é o arco: função G2 (sentido horário), raio R6 — soma 6 mm no raio (12 no diâmetro) e 6 mm em Z. A coluna R desse bloco vale 6.',
+    'N50→N60 é o arco: função G2 (sentido horário). O raio R6 desloca o ponto final 6 mm no raio (12 no diâmetro) e 6 mm em Z — isso já aparece nas colunas de X e Z, absoluto e incremental, como em qualquer outro ponto.',
     'N70→N80 é cone: X vai a 50 enquanto Z vai a −55.'
   ]
 },
