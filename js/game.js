@@ -395,8 +395,8 @@ function renderMap(){
 }
 
 /* ---------------- colunas por modo ---------------- */
-const KLBL_TORNO={ax:'X (absoluto)', az:'Z (absoluto)', ix:'ΔX', iz:'ΔZ', g:'função G', r:'raio R'};
-const KLBL_FRESA={ax:'X (absoluto)', az:'Y (absoluto)', ix:'ΔX', iz:'ΔY', g:'função G', r:'raio R'};
+const KLBL_TORNO={ax:'X (absoluto)', az:'Z (absoluto)', ix:'ΔX', iz:'ΔZ', g:'função G'};
+const KLBL_FRESA={ax:'X (absoluto)', az:'Y (absoluto)', ix:'ΔX', iz:'ΔY', g:'função G'};
 const klblFor = m => m==='fresa' ? KLBL_FRESA : KLBL_TORNO;
 function colsOf(lv){
   const m=lv.modes[0], fresa=(lv.machine||S.machine)==='fresa';
@@ -406,13 +406,15 @@ function colsOf(lv){
   if(m==='both') return [{k:'ax',h:'X',g:'ABSOLUTAS'},{k:'az',h:Z,g:'ABSOLUTAS'},
                          {k:'ix',h:'ΔX',g:'INCREMENTAIS'},{k:'iz',h:'Δ'+Z,g:'INCREMENTAIS'}];
   if(m!=='gcode') console.warn('modo desconhecido:',m);
-  const cols=[{k:'g',h:'Função',g:'BLOCO'},{k:'ax',h:'X',g:'BLOCO'},{k:'az',h:Z,g:'BLOCO'}];
-  if(lv.pts.some(p=>p.arc)) cols.push({k:'r',h:'R',g:'BLOCO'});
-  return cols;
+  /* G-code: a função (G0/G1/G2/G3) mais as mesmas colunas de sempre — igual à
+     tabela real de programação. O raio de um arco NUNCA é digitado como número
+     solto: G02/G03 + o ponto final (absoluto e incremental) já definem o arco. */
+  return [{k:'g',h:'Função',g:'BLOCO'},
+          {k:'ax',h:'X',g:'ABSOLUTAS'},{k:'az',h:Z,g:'ABSOLUTAS'},
+          {k:'ix',h:'ΔX',g:'INCREMENTAIS'},{k:'iz',h:'Δ'+Z,g:'INCREMENTAIS'}];
 }
 function expected(lv,r,k){
   const p=lv.pts[r], pv=r>0?lv.pts[r-1]:{x:0,z:0};
-  if(k==='r')  return p.arc;
   if(k==='ax') return p.x;
   if(k==='az') return p.z;
   if(k==='ix') return +(p.x-pv.x).toFixed(3);
@@ -473,7 +475,7 @@ function buildTable(lv){
   const cols=colsOf(lv), t=$('#coordTable');
   const groups=[]; cols.forEach(c=>{ const g=groups[groups.length-1];
     if(g&&g.n===c.g) g.span++; else groups.push({n:c.g,span:1}); });
-  const inc = lv.modes[0]==='inc'||lv.modes[0]==='both';
+  const inc = lv.modes[0]==='inc'||lv.modes[0]==='both'||lv.modes[0]==='gcode';
   let h=`<thead><tr><th rowspan="2">${inc?'De → Para':'Ponto'}</th>`+
         groups.map(g=>`<th class="grp" colspan="${g.span}">${g.n}</th>`).join('')+`</tr><tr>`+
         cols.map(c=>`<th>${c.h}</th>`).join('')+`</tr></thead><tbody>`;
@@ -482,8 +484,6 @@ function buildTable(lv){
     h+=`<tr data-r="${r}"><td class="lbl">${lbl}</td>`+
       cols.map(c=> c.k==='g'
         ? `<td><select aria-label="${lbl} — função G" data-r="${r}" data-k="g"><option value="">--</option><option>G0</option><option>G1</option><option>G2</option><option>G3</option></select></td>`
-        : c.k==='r' && !p.arc
-        ? `<td class="nacell" aria-label="${lbl} — raio: não se aplica">—</td>`
         /* colunas de Z pedem sinal negativo: inputmode text traz o teclado com "-" */
         : `<td><input type="text" inputmode="${c.k==='az'||c.k==='iz'?'text':'decimal'}"
              enterkeyhint="next" autocomplete="off" autocorrect="off"
